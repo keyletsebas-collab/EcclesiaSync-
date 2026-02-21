@@ -2,7 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 const AuthContext = createContext();
-const API = import.meta.env.VITE_API_URL || (import.meta.env.DEV ? 'http://localhost:3001/api' : '/api');
+const API = import.meta.env.VITE_API_URL ||
+    (window.location.hostname.includes('vercel.app') ? '/api' : 'http://192.168.100.179:3001/api');
 
 export const useAuth = () => {
     return useContext(AuthContext);
