@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">EcclesiaSync</string>
+    <string name="title_activity_main">EcclesiaSync</string>
+    <string name="package_name">com.ecclesiasync.app</string>
+    <string name="custom_url_scheme">com.ecclesiasync.app</string>
+</resources>
