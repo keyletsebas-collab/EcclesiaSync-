@@ -1,6 +1,7 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
 import { BookOpen, Users, Calendar, Shield, Zap, Globe, ArrowRight, ChevronDown, Play, X } from 'lucide-react';
+// Build trigger: 2026-02-21 17:18
 
 const LandingPage = ({ onEnter }) => {
     const { t } = useLanguage();
