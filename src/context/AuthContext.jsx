@@ -2,9 +2,23 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 
 const AuthContext = createContext();
-const API = (window.location.hostname === 'localhost' ? 'http://localhost:3001/api' :
-    window.location.hostname.includes('vercel.app') ? '/api' :
-        import.meta.env.VITE_API_URL || 'http://192.168.100.179:3001/api');
+const getApiUrl = () => {
+    const { hostname } = window.location;
+    // On Vercel
+    if (hostname.includes('vercel.app') || hostname.includes('churchmanager')) {
+        return '/api';
+    }
+    // On Local or Android
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+        // Use network IP for mobile/capacitor, but localhost for the PC browser
+        const isNative = window.Capacitor?.isNative || hostname === '';
+        return isNative ? 'http://192.168.100.179:3001/api' : 'http://localhost:3001/api';
+    }
+    // Fallback to network IP
+    return 'http://192.168.100.179:3001/api';
+};
+
+const API = import.meta.env.VITE_API_URL || getApiUrl();
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -27,6 +41,7 @@ export const AuthProvider = ({ children }) => {
     const fetchUsers = async () => {
         try {
             const res = await fetch(`${API}/auth/users`);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
             const data = await res.json();
             setUsers(data);
         } catch (err) {
@@ -59,7 +74,8 @@ export const AuthProvider = ({ children }) => {
             await fetchUsers();
             return { success: true, accountId: data.accountId };
         } catch (err) {
-            return { success: false, error: 'Cannot connect to server. Is the backend running?' };
+            console.error('Signup error:', err);
+            return { success: false, error: `Connection failed: ${err.message}. Please check if the server is running at ${API}` };
         }
     };
 
@@ -75,7 +91,8 @@ export const AuthProvider = ({ children }) => {
             setCurrentUser({ username: data.username, isMaster: data.isMaster, accountId: data.accountId });
             return { success: true };
         } catch (err) {
-            return { success: false, error: 'Cannot connect to server. Is the backend running?' };
+            console.error('Login error:', err);
+            return { success: false, error: `Connection failed: ${err.message}. Please check if the server is running at ${API}` };
         }
     };
 

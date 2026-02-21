@@ -1,9 +1,19 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const StorageContext = createContext();
-const API = (window.location.hostname === 'localhost' ? 'http://localhost:3001/api' :
-    window.location.hostname.includes('vercel.app') ? '/api' :
-        import.meta.env.VITE_API_URL || 'http://192.168.100.179:3001/api');
+const getApiUrl = () => {
+    const { hostname } = window.location;
+    if (hostname.includes('vercel.app') || hostname.includes('churchmanager')) {
+        return '/api';
+    }
+    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
+        const isNative = window.Capacitor?.isNative || hostname === '';
+        return isNative ? 'http://192.168.100.179:3001/api' : 'http://localhost:3001/api';
+    }
+    return 'http://192.168.100.179:3001/api';
+};
+
+const API = import.meta.env.VITE_API_URL || getApiUrl();
 
 export const useStorage = () => {
     return useContext(StorageContext);
