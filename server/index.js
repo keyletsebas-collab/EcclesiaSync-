@@ -281,10 +281,14 @@ app.delete('/api/services/:id', async (req, res) => {
 });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-app.listen(PORT, () => {
-    console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-    // Diagnostic connection test
-    pool.query('SELECT 1')
-        .then(() => console.log('✅ DATABASE STATUS: CONNECTED (sql3.freesqldatabase.com)'))
-        .catch(err => console.error('❌ DATABASE STATUS: FAILED', err.message));
-});
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
+        // Diagnostic connection test
+        pool.query('SELECT 1')
+            .then(() => console.log('✅ DATABASE STATUS: CONNECTED (sql3.freesqldatabase.com)'))
+            .catch(err => console.error('❌ DATABASE STATUS: FAILED', err.message));
+    });
+}
+
+export default app;
