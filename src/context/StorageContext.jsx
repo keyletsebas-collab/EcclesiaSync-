@@ -1,8 +1,9 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 
 const StorageContext = createContext();
-const API = import.meta.env.VITE_API_URL ||
-    (window.location.hostname.includes('vercel.app') ? '/api' : 'http://192.168.100.179:3001/api');
+const API = (window.location.hostname === 'localhost' ? 'http://localhost:3001/api' :
+    window.location.hostname.includes('vercel.app') ? '/api' :
+        import.meta.env.VITE_API_URL || 'http://192.168.100.179:3001/api');
 
 export const useStorage = () => {
     return useContext(StorageContext);
