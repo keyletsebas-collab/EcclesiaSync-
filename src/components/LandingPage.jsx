@@ -4,7 +4,6 @@ import { BookOpen, Users, Calendar, Shield, Zap, Globe, ArrowRight, ChevronDown,
 
 const LandingPage = ({ onEnter }) => {
     const { t } = useLanguage();
-    const [isTrailerOpen, setIsTrailerOpen] = React.useState(false);
 
     return (
         <div className="landing-container" style={{
@@ -15,162 +14,229 @@ const LandingPage = ({ onEnter }) => {
             fontFamily: 'Inter, system-ui, sans-serif'
         }}>
             {/* Navigation */}
-            {/* ... navigation remains same ... */}
+            <nav style={{
+                padding: '1.5rem 5%',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                position: 'fixed',
+                width: '100%',
+                top: 0,
+                zIndex: 100,
+                background: 'rgba(15, 23, 42, 0.8)',
+                backdropFilter: 'blur(10px)',
+                borderBottom: '1px solid var(--border)'
+            }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                    <div style={{
+                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                        padding: '0.5rem',
+                        borderRadius: '10px'
+                    }}>
+                        <BookOpen size={20} color="white" />
+                    </div>
+                    <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
+                        EcclesiaSync
+                    </span>
+                </div>
+                <button
+                    onClick={onEnter}
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.875rem', padding: '0.6rem 1.25rem' }}
+                >
+                    {t('login')}
+                </button>
+            </nav>
 
             {/* Hero Section */}
-            {/* ... hero remains same ... */}
-
-            {/* Trailer / Showcase Section */}
-            <section style={{
-                padding: '40px 5%',
-                maxWidth: '1000px',
-                margin: '-60px auto 40px',
-                position: 'relative',
-                zIndex: 10
+            <header style={{
+                padding: '160px 5% 80px',
+                textAlign: 'center',
+                background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.1) 0%, transparent 50%)'
             }}>
-                <div style={{
-                    position: 'relative',
-                    padding: '2rem',
-                    background: 'rgba(15, 23, 42, 0.4)',
-                    backdropFilter: 'blur(20px)',
-                    borderRadius: '24px',
-                    border: '1px solid var(--primary-glow)',
-                    overflow: 'hidden',
-                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5)'
-                }}>
+                <div className="animate-fade-in" style={{ maxWidth: '800px', margin: '0 auto' }}>
                     <div style={{
-                        width: '100%',
-                        aspectRatio: '16/9',
-                        background: 'linear-gradient(45deg, #0f172a, #1e1b4b)',
-                        borderRadius: '16px',
-                        display: 'flex',
+                        display: 'inline-flex',
                         alignItems: 'center',
-                        justifyContent: 'center',
-                        cursor: 'pointer',
-                        position: 'relative',
-                        overflow: 'hidden',
-                        border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }} onClick={() => setIsTrailerOpen(true)}>
-                        {/* Fake Thumbnail Info */}
-                        <div style={{
-                            position: 'absolute',
-                            zIndex: 2,
-                            textAlign: 'center'
-                        }}>
-                            <div style={{
-                                width: '80px',
-                                height: '80px',
-                                background: 'var(--primary)',
-                                borderRadius: '50%',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                marginBottom: '1rem',
-                                boxShadow: '0 0 30px var(--primary-glow)',
-                                color: 'white',
-                                margin: '0 auto 1.5rem'
-                            }}>
-                                <Play size={32} fill="white" />
-                            </div>
-                            <h3 style={{ fontSize: '1.5rem', fontWeight: 800, color: 'white', textShadow: '0 2px 4px rgba(0,0,0,0.5)' }}>
-                                {t('watchTrailer')}
-                            </h3>
-                        </div>
-
-                        {/* Animated background circles for the player */}
-                        <div style={{
-                            position: 'absolute',
-                            width: '400px',
-                            height: '400px',
-                            background: 'radial-gradient(circle, var(--primary-glow) 0%, transparent 70%)',
-                            opacity: 0.2,
-                            top: '-10%',
-                            right: '-10%',
-                            pointerEvents: 'none'
-                        }} />
-                        <div style={{
-                            position: 'absolute',
-                            width: '300px',
-                            height: '300px',
-                            background: 'radial-gradient(circle, rgba(168, 85, 247, 0.2) 0%, transparent 70%)',
-                            opacity: 0.1,
-                            bottom: '-5%',
-                            left: '5%',
-                            pointerEvents: 'none'
-                        }} />
+                        gap: '0.5rem',
+                        padding: '0.5rem 1rem',
+                        borderRadius: '100px',
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid var(--primary-glow)',
+                        color: 'var(--primary)',
+                        fontSize: '0.875rem',
+                        fontWeight: 600,
+                        marginBottom: '2rem'
+                    }}>
+                        <Zap size={14} fill="currentColor" />
+                        <span>{t('appName')} v2.1.0 Cloud Ready</span>
                     </div>
+                    <h1 style={{ lineHeight: 1.1, marginBottom: '1.5rem' }}>
+                        {t('heroTitle')}<br />
+                        <span style={{
+                            background: 'linear-gradient(to right, var(--primary), var(--secondary))',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                        }}>
+                            {t('heroTitleAccent')}
+                        </span>
+                    </h1>
+                    <p style={{
+                        fontSize: '1.25rem',
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.6,
+                        marginBottom: '3rem',
+                        maxWidth: '600px',
+                        margin: '0 auto 3rem'
+                    }}>
+                        {t('heroSubtitle')}
+                    </p>
+                    <div style={{ display: 'flex', gap: '1rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button
+                            onClick={onEnter}
+                            className="btn btn-primary"
+                            style={{ padding: '1rem 2.5rem', fontSize: '1rem', minWidth: '200px' }}
+                        >
+                            {t('getStarted')}
+                            <ArrowRight size={20} />
+                        </button>
+                        <button
+                            onClick={onEnter}
+                            className="btn"
+                            style={{
+                                padding: '1rem 2.5rem',
+                                fontSize: '1rem',
+                                minWidth: '200px',
+                                background: 'rgba(255, 255, 255, 0.05)',
+                                border: '1px solid var(--border)',
+                                color: 'white'
+                            }}
+                        >
+                            {t('login')}
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+
+
+            {/* Features (Bento Grid) */}
+            <section style={{ padding: '80px 5%', maxWidth: '1200px', margin: '0 auto' }}>
+                <div style={{ textAlign: 'center', marginBottom: '4rem' }}>
+                    <h2 style={{ fontSize: '2.5rem' }}>{t('allYouNeed')}</h2>
+                    <p style={{ color: 'var(--text-muted)' }}>{t('featuresSubtitle')}</p>
+                </div>
+
+                <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
+                    gap: '1.5rem'
+                }}>
+                    <FeatureCard
+                        icon={<Users size={24} />}
+                        title={t('featureMembersTitle')}
+                        description={t('featureMembersDesc')}
+                    />
+                    <FeatureCard
+                        icon={<Calendar size={24} />}
+                        title={t('featureServicesTitle')}
+                        description={t('featureServicesDesc')}
+                    />
+                    <FeatureCard
+                        icon={<Globe size={24} />}
+                        title={t('featureCloudTitle')}
+                        description={t('featureCloudDesc')}
+                    />
+                    <FeatureCard
+                        icon={<BookOpen size={24} />}
+                        title={t('featureTemplatesTitle')}
+                        description={t('featureTemplatesDesc')}
+                    />
+                    <FeatureCard
+                        icon={<Zap size={24} />}
+                        title={t('featureAutoTitle')}
+                        description={t('featureAutoDesc')}
+                    />
+                    <FeatureCard
+                        icon={<Shield size={24} />}
+                        title={t('featureGlobalTitle')}
+                        description={t('featureGlobalDesc')}
+                    />
                 </div>
             </section>
 
-            {/* Video Modal */}
-            {isTrailerOpen && (
-                <div style={{
-                    position: 'fixed',
-                    inset: 0,
-                    zIndex: 2000,
-                    background: 'rgba(2, 6, 23, 0.95)',
-                    backdropFilter: 'blur(20px)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    padding: '2rem'
+            {/* About Section */}
+            <section style={{ padding: '80px 5%', background: 'rgba(15, 23, 42, 0.3)', borderTop: '1px solid var(--border)', borderBottom: '1px solid var(--border)' }}>
+                <div style={{ maxWidth: '800px', margin: '0 auto', textAlign: 'center' }}>
+                    <h2 style={{ fontSize: '2.5rem', marginBottom: '1.5rem' }}>{t('aboutTitle')}</h2>
+                    <p style={{
+                        fontSize: '1.1rem',
+                        color: 'var(--text-muted)',
+                        lineHeight: 1.8,
+                        maxWidth: '700px',
+                        margin: '0 auto'
+                    }}>
+                        {t('aboutBio')}
+                    </p>
+                </div>
+            </section>
+
+            {/* Download Section */}
+            <section style={{ padding: '100px 5%', textAlign: 'center' }}>
+                <div className="glass-panel" style={{
+                    maxWidth: '900px',
+                    margin: '0 auto',
+                    padding: '4rem 2rem',
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(236, 72, 153, 0.1) 100%)',
+                    position: 'relative',
+                    overflow: 'hidden'
                 }}>
+                    <h2 style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>{t('installApp')}</h2>
+                    <p style={{ color: 'var(--text-muted)', fontSize: '1.1rem', marginBottom: '2.5rem', maxWidth: '600px', margin: '0 auto 2.5rem' }}>
+                        Accede rápidamente desde tu escritorio o dispositivo móvil instalando la aplicación directamente.
+                    </p>
                     <button
-                        onClick={() => setIsTrailerOpen(false)}
-                        style={{
-                            position: 'absolute',
-                            top: '2rem',
-                            right: '2rem',
-                            background: 'rgba(255, 255, 255, 0.1)',
-                            border: '1px solid rgba(255, 255, 255, 0.1)',
-                            color: 'white',
-                            padding: '0.75rem',
-                            borderRadius: '50%',
-                            cursor: 'pointer'
-                        }}
+                        className="btn btn-primary"
+                        style={{ padding: '1rem 3rem', fontSize: '1.1rem' }}
                     >
-                        <X size={24} />
+                        <Zap size={20} fill="white" />
+                        {t('installButton')}
                     </button>
 
+                    {/* Decorative Elements */}
                     <div style={{
-                        width: '100%',
-                        maxWidth: '1200px',
-                        aspectRatio: '16/9',
-                        background: 'black',
-                        borderRadius: '16px',
-                        overflow: 'hidden',
-                        boxShadow: '0 0 100px rgba(0,0,0,1)',
-                        border: '1px solid rgba(255, 255, 255, 0.1)'
-                    }}>
-                        {/* Placeholder for the video recording - I will embed the actual recording here later */}
-                        <div style={{
-                            width: '100%',
-                            height: '100%',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            flexDirection: 'column',
-                            gap: '1rem',
-                            color: 'var(--text-muted)'
-                        }}>
-                            <div className="animate-pulse" style={{ width: '100%', height: '100%', background: 'linear-gradient(45deg, #020617, #0f172a)' }}>
-                                <div style={{
-                                    width: '100%',
-                                    height: '100%',
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    justifyContent: 'center'
-                                }}>
-                                    <h2 style={{ color: 'white', opacity: 0.5 }}>EcclesiaSync Cinematic Trailer</h2>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+                        position: 'absolute',
+                        top: '-50px',
+                        right: '-50px',
+                        width: '200px',
+                        height: '200px',
+                        background: 'radial-gradient(circle, var(--primary-glow) 0%, transparent 70%)',
+                        opacity: 0.2,
+                        pointerEvents: 'none'
+                    }} />
                 </div>
-            )}
+            </section>
 
-            {/* Features (Bento Grid) remains same ... */}
-            {/* Footer remains same ... */}
+            {/* CTA Section */}
+            <section style={{
+                padding: '100px 5%',
+                textAlign: 'center',
+                background: 'radial-gradient(circle at 50% 50%, rgba(99, 102, 241, 0.15) 0%, transparent 70%)'
+            }}>
+                <h2 style={{ fontSize: '3rem', maxWidth: '800px', margin: '0 auto 2rem', lineHeight: 1.2 }}>
+                    {t('ctaTitle')}
+                </h2>
+                <button
+                    onClick={onEnter}
+                    className="btn btn-primary"
+                    style={{ padding: '1.25rem 4rem', fontSize: '1.25rem', borderRadius: '100px' }}
+                >
+                    {t('ctaButton')}
+                    <ArrowRight size={24} />
+                </button>
+            </section>
+
+
 
             {/* Footer */}
             <footer style={{
@@ -210,7 +276,8 @@ const FeatureCard = ({ icon, title, description }) => (
         padding: '2rem',
         transition: 'all 0.3s',
         border: '1px solid var(--border)',
-        textAlign: 'left'
+        textAlign: 'left',
+        background: 'rgba(30, 41, 59, 0.7)'
     }}>
         <div style={{
             color: 'var(--primary)',
