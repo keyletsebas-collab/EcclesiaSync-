@@ -9,16 +9,16 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
     const { t } = useLanguage();
     const [userToDelete, setUserToDelete] = useState(null);
 
-    const handleToggleMaster = async (username) => {
-        const user = allUsers.find(u => u.username === username);
+    const handleToggleMaster = async (uid) => {
+        const user = allUsers.find(u => u.uid === uid);
         if (user) {
-            await onUpdateUser(username, { isMaster: !user.isMaster });
+            await onUpdateUser(uid, { isMaster: !user.isMaster });
         }
     };
 
-    const confirmDelete = async (username) => {
+    const confirmDelete = async (uid, username) => {
         if (window.confirm(`¿Estás seguro de eliminar la cuenta de ${username}? Esta acción no se puede deshacer.`)) {
-            await onDeleteUser(username);
+            await onDeleteUser(uid);
         }
     };
 
@@ -57,7 +57,7 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
 
                 <div style={{ maxHeight: '400px', overflowY: 'auto' }}>
                     {allUsers.map(user => (
-                        <div key={user.username} style={{
+                        <div key={user.uid} style={{
                             padding: '1rem',
                             background: 'rgba(15, 23, 42, 0.6)',
                             borderRadius: 'var(--radius)',
@@ -92,7 +92,7 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
 
                                 <div style={{ display: 'flex', gap: '0.5rem' }}>
                                     <button
-                                        onClick={() => handleToggleMaster(user.username)}
+                                        onClick={() => handleToggleMaster(user.uid)}
                                         className="btn"
                                         style={{
                                             padding: '0.5rem 0.75rem',
@@ -107,14 +107,14 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
                                     </button>
 
                                     <button
-                                        onClick={() => confirmDelete(user.username)}
+                                        onClick={() => confirmDelete(user.uid, user.username)}
                                         className="btn-danger"
                                         style={{
                                             padding: '0.5rem 0.75rem',
                                             fontSize: '0.75rem'
                                         }}
                                         title="Eliminar cuenta"
-                                        disabled={user.username === currentUser?.username}
+                                        disabled={user.uid === currentUser?.uid}
                                     >
                                         <Trash2 size={14} />
                                     </button>

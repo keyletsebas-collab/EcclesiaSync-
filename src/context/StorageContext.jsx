@@ -1,19 +1,16 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-
-const StorageContext = createContext();
-const getApiUrl = () => {
-    const { hostname } = window.location;
-    if (hostname.includes('vercel.app') || hostname.includes('churchmanager')) {
-        return '/api';
-    }
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
-        const isNative = window.Capacitor?.isNative || hostname === '';
-        return isNative ? 'http://192.168.100.179:3001/api' : 'http://localhost:3001/api';
-    }
-    return 'http://192.168.100.179:3001/api';
-};
-
-const API = import.meta.env.VITE_API_URL || getApiUrl();
+import {
+    collection,
+    addDoc,
+    updateDoc,
+    deleteDoc,
+    doc,
+    onSnapshot,
+    query,
+    where,
+    orderBy,
+    setDoc
+} from 'firebase/firestore';
+import { db } from '../firebase-config';
 
 export const useStorage = () => {
     return useContext(StorageContext);
@@ -25,41 +22,57 @@ export const StorageProvider = ({ children, accountId }) => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Load all data
-    const loadAll = useCallback(async () => {
-        setLoading(true);
-        try {
-            const [tRes, mRes, sRes] = await Promise.all([
-                fetch(`${API}/templates`),
-                fetch(`${API}/members`),
-                fetch(`${API}/services`)
-            ]);
-            const [t, m, s] = await Promise.all([tRes.json(), mRes.json(), sRes.json()]);
-            setTemplates(Array.isArray(t) ? t : []);
-            setMembers(Array.isArray(m) ? m : []);
-            setServices(Array.isArray(s) ? s : []);
-        } catch (err) {
-            console.error('StorageContext Error - Fetch failed:', err);
-        } finally {
-            setLoading(false);
-        }
-    }, []);
-
+    // Load all data with real-time listeners
     useEffect(() => {
-        loadAll();
-    }, [loadAll]);
+        if (!accountId) return;
+
+        setLoading(true);
+
+        // Templates Listener
+        const qTemplates = query(collection(db, 'templates'), where('accountId', '==', accountId), orderBy('createdAt', 'desc'));
+        const unsubTemplates = onSnapshot(qTemplates, (snapshot) => {
+            const t = [];
+            snapshot.forEach((doc) => t.push({ id: doc.id, ...doc.data() }));
+            setTemplates(t);
+            setLoading(false);
+        }, (err) => {
+            console.error('Templates listener error:', err);
+            setLoading(false);
+        });
+
+        // Members Listener
+        const qMembers = query(collection(db, 'members'), where('accountId', '==', accountId), orderBy('name', 'asc'));
+        const unsubMembers = onSnapshot(qMembers, (snapshot) => {
+            const m = [];
+            snapshot.forEach((doc) => m.push({ id: doc.id, ...doc.data() }));
+            setMembers(m);
+        });
+
+        // Services Listener
+        const qServices = query(collection(db, 'services'), where('accountId', '==', accountId), orderBy('serviceDate', 'asc'));
+        const unsubServices = onSnapshot(qServices, (snapshot) => {
+            const s = [];
+            snapshot.forEach((doc) => s.push({ id: doc.id, ...doc.data() }));
+            setServices(s);
+        });
+
+        return () => {
+            unsubTemplates();
+            unsubMembers();
+            unsubServices();
+        };
+    }, [accountId]);
 
     // ── Template Actions ──────────────────────────────────────────────────────
 
     const addTemplate = async (name, customFields = []) => {
         try {
-            const res = await fetch(`${API}/templates`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accountId, name, customFields })
+            await addDoc(collection(db, 'templates'), {
+                accountId,
+                name,
+                customFields,
+                createdAt: new Date().toISOString()
             });
-            const newTemplate = await res.json();
-            setTemplates(prev => [...prev, newTemplate]);
         } catch (err) {
             console.error('Failed to add template:', err);
         }
@@ -67,12 +80,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateTemplate = async (id, updatedData) => {
         try {
-            await fetch(`${API}/templates/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
-            });
-            setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updatedData } : t));
+            await updateDoc(doc(db, 'templates', id), updatedData);
         } catch (err) {
             console.error('Failed to update template:', err);
         }
@@ -80,10 +88,15 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteTemplate = async (id) => {
         try {
-            await fetch(`${API}/templates/${id}`, { method: 'DELETE' });
-            setTemplates(prev => prev.filter(t => t.id !== id));
-            setMembers(prev => prev.filter(m => m.templateId !== id));
-            setServices(prev => prev.filter(s => s.templateId !== id));
+            await deleteDoc(doc(db, 'templates', id));
+            // Cleanup cascade for Firestore (manual cleanup needed unlike some SQL triggers)
+            const mQuery = query(collection(db, 'members'), where('templateId', '==', id));
+            const mSnap = await getDocs(mQuery);
+            mSnap.forEach(async (mDoc) => await deleteDoc(doc(db, 'members', mDoc.id)));
+
+            const sQuery = query(collection(db, 'services'), where('templateId', '==', id));
+            const sSnap = await getDocs(sQuery);
+            sSnap.forEach(async (sDoc) => await deleteDoc(doc(db, 'services', sDoc.id)));
         } catch (err) {
             console.error('Failed to delete template:', err);
         }
@@ -93,13 +106,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const addMember = async (templateId, memberData) => {
         try {
-            const res = await fetch(`${API}/members`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ templateId, accountId, ...memberData })
+            await addDoc(collection(db, 'members'), {
+                templateId,
+                accountId,
+                ...memberData,
+                createdAt: new Date().toISOString()
             });
-            const newMember = await res.json();
-            setMembers(prev => [...prev, newMember]);
         } catch (err) {
             console.error('Failed to add member:', err);
         }
@@ -107,12 +119,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateMember = async (id, updatedData) => {
         try {
-            await fetch(`${API}/members/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
-            });
-            setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updatedData } : m));
+            await updateDoc(doc(db, 'members', id), updatedData);
         } catch (err) {
             console.error('Failed to update member:', err);
         }
@@ -120,9 +127,10 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteMember = async (id) => {
         try {
-            await fetch(`${API}/members/${id}`, { method: 'DELETE' });
-            setMembers(prev => prev.filter(m => m.id !== id));
-            setServices(prev => prev.filter(s => s.memberId !== id));
+            await deleteDoc(doc(db, 'members', id));
+            const sQuery = query(collection(db, 'services'), where('memberId', '==', id));
+            const sSnap = await getDocs(sQuery);
+            sSnap.forEach(async (sDoc) => await deleteDoc(doc(db, 'services', sDoc.id)));
         } catch (err) {
             console.error('Failed to delete member:', err);
         }
@@ -132,13 +140,15 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '') => {
         try {
-            const res = await fetch(`${API}/services`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ templateId, memberId, accountId, memberName, serviceDate, serviceType })
+            await addDoc(collection(db, 'services'), {
+                templateId,
+                memberId,
+                accountId,
+                memberName,
+                serviceDate,
+                serviceType,
+                createdAt: new Date().toISOString()
             });
-            const newService = await res.json();
-            setServices(prev => [...prev, newService]);
         } catch (err) {
             console.error('Failed to add service:', err);
         }
@@ -146,12 +156,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateService = async (id, updatedData) => {
         try {
-            await fetch(`${API}/services/${id}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
-            });
-            setServices(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
+            await updateDoc(doc(db, 'services', id), updatedData);
         } catch (err) {
             console.error('Failed to update service:', err);
         }
@@ -159,8 +164,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteService = async (id) => {
         try {
-            await fetch(`${API}/services/${id}`, { method: 'DELETE' });
-            setServices(prev => prev.filter(s => s.id !== id));
+            await deleteDoc(doc(db, 'services', id));
         } catch (err) {
             console.error('Failed to delete service:', err);
         }

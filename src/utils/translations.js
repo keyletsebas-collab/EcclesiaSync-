@@ -58,6 +58,9 @@ export const translations = {
         // Settings
         settingsTitle: 'Settings',
         language: 'Language',
+        theme: 'Theme',
+        light: 'Light',
+        dark: 'Dark',
         accountInfo: 'Account Information',
         accountType: 'Account Type',
         accountId: 'Account ID',
@@ -180,6 +183,9 @@ export const translations = {
         // Settings
         settingsTitle: 'Ajustes',
         language: 'Idioma',
+        theme: 'Tema',
+        light: 'Claro',
+        dark: 'Oscuro',
         accountInfo: 'Información de Cuenta',
         accountType: 'Tipo de Cuenta',
         accountId: 'ID de Cuenta',

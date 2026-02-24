@@ -1,24 +1,16 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import {
+    createUserWithEmailAndPassword,
+    signInWithEmailAndPassword,
+    signOut,
+    onAuthStateChanged,
+    updateProfile
+} from 'firebase/auth';
+import { doc, setDoc, getDoc, getDocs, collection, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
+import { auth, db } from '../firebase-config';
 
 const AuthContext = createContext();
-const getApiUrl = () => {
-    const { hostname } = window.location;
-    // On Vercel
-    if (hostname.includes('vercel.app') || hostname.includes('churchmanager')) {
-        return '/api';
-    }
-    // On Local or Android
-    if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '') {
-        // Use network IP for mobile/capacitor, but localhost for the PC browser
-        const isNative = window.Capacitor?.isNative || hostname === '';
-        return isNative ? 'http://192.168.100.179:3001/api' : 'http://localhost:3001/api';
-    }
-    // Fallback to network IP
-    return 'http://192.168.100.179:3001/api';
-};
-
-const API = import.meta.env.VITE_API_URL || getApiUrl();
+// Firebase Migration: API logic is being phased out
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -36,87 +28,99 @@ export const AuthProvider = ({ children }) => {
     });
 
     const [users, setUsers] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-    // Fetch users list from API
+    useEffect(() => {
+        const unsubscribe = onAuthStateChanged(auth, async (user) => {
+            if (user) {
+                // Fetch additional user data from Firestore
+                const userDoc = await getDoc(doc(db, 'users', user.uid));
+                if (userDoc.exists()) {
+                    const userData = userDoc.data();
+                    setCurrentUser({
+                        uid: user.uid,
+                        username: user.email,
+                        isMaster: userData.isMaster || false,
+                        accountId: userData.accountId
+                    });
+                } else {
+                    // Fallback if doc doesn't exist yet
+                    setCurrentUser({
+                        uid: user.uid,
+                        username: user.email,
+                        isMaster: false,
+                        accountId: user.uid.substring(0, 8).toUpperCase()
+                    });
+                }
+            } else {
+                setCurrentUser(null);
+            }
+            setLoading(false);
+        });
+
+        return () => unsubscribe();
+    }, []);
+
     const fetchUsers = async () => {
+        if (!currentUser?.isMaster) return;
         try {
-            const res = await fetch(`${API}/auth/users`);
-            if (!res.ok) throw new Error(`HTTP ${res.status}`);
-            const data = await res.json();
-            setUsers(data);
+            const querySnapshot = await getDocs(collection(db, 'users'));
+            const usersList = [];
+            querySnapshot.forEach((doc) => {
+                usersList.push({ ...doc.data(), uid: doc.id });
+            });
+            setUsers(usersList);
         } catch (err) {
             console.error('Failed to fetch users:', err);
         }
     };
 
-    useEffect(() => {
-        fetchUsers();
-    }, []);
-
-    useEffect(() => {
-        if (currentUser) {
-            localStorage.setItem('app_current_user', JSON.stringify(currentUser));
-        } else {
-            localStorage.removeItem('app_current_user');
-        }
-    }, [currentUser]);
-
-    const signup = async (username, password, isMaster = false) => {
+    const signup = async (email, password, isMaster = false) => {
         try {
-            const res = await fetch(`${API}/auth/signup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password, isMaster })
-            });
-            const data = await res.json();
-            if (!data.success) return { success: false, error: data.error };
-            setCurrentUser({ username: data.username, isMaster: data.isMaster, accountId: data.accountId });
-            await fetchUsers();
-            return { success: true, accountId: data.accountId };
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+            const accountId = Math.random().toString(36).substring(2, 10).toUpperCase();
+
+            const userData = {
+                username: email,
+                isMaster,
+                accountId,
+                createdAt: new Date().toISOString()
+            };
+
+            await setDoc(doc(db, 'users', user.uid), userData);
+
+            return { success: true, accountId };
         } catch (err) {
             console.error('Signup error:', err);
-            return { success: false, error: `Connection failed: ${err.message}. Please check if the server is running at ${API}` };
+            return { success: false, error: err.message };
         }
     };
 
-    const login = async (username, password) => {
+    const login = async (email, password) => {
         try {
-            const res = await fetch(`${API}/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username, password })
-            });
-            const data = await res.json();
-            if (!data.success) return { success: false, error: data.error };
-            setCurrentUser({ username: data.username, isMaster: data.isMaster, accountId: data.accountId });
+            await signInWithEmailAndPassword(auth, email, password);
             return { success: true };
         } catch (err) {
             console.error('Login error:', err);
-            return { success: false, error: `Connection failed: ${err.message}. Please check if the server is running at ${API}` };
+            return { success: false, error: err.message };
         }
     };
 
-    const logout = () => {
-        setCurrentUser(null);
-    };
+    const logout = () => signOut(auth);
 
-    const updateUserRole = async (username, updates) => {
+    const updateUserRole = async (uid, updates) => {
         try {
-            await fetch(`${API}/auth/users/${username}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updates)
-            });
+            await updateDoc(doc(db, 'users', uid), updates);
             await fetchUsers();
         } catch (err) {
             console.error('Failed to update user role:', err);
         }
     };
 
-    const deleteUser = async (username) => {
+    const deleteUser = async (uid) => {
         try {
-            await fetch(`${API}/auth/users/${username}`, { method: 'DELETE' });
-            if (currentUser?.username === username) logout();
+            await deleteDoc(doc(db, 'users', uid));
             await fetchUsers();
         } catch (err) {
             console.error('Failed to delete user:', err);
@@ -126,17 +130,19 @@ export const AuthProvider = ({ children }) => {
     const value = {
         currentUser,
         isAuthenticated: !!currentUser,
+        loading,
         users,
         signup,
         login,
         logout,
         updateUserRole,
-        deleteUser
+        deleteUser,
+        fetchUsers
     };
 
     return (
         <AuthContext.Provider value={value}>
-            {children}
+            {!loading && children}
         </AuthContext.Provider>
     );
 };

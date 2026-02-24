@@ -4,9 +4,8 @@ import App from './App.jsx'
 import { AuthProvider, useAuth } from './context/AuthContext'
 import { LanguageProvider } from './context/LanguageContext'
 import { StorageProvider } from './context/StorageContext'
+import { ThemeProvider } from './context/ThemeContext'
 import './index.css'
-
-
 
 // Inner wrapper to pass accountId from AuthContext to StorageProvider
 function AppWithStorage() {
@@ -20,10 +19,12 @@ function AppWithStorage() {
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <LanguageProvider>
-      <AuthProvider>
-        <AppWithStorage />
-      </AuthProvider>
-    </LanguageProvider>
+    <ThemeProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <AppWithStorage />
+        </AuthProvider>
+      </LanguageProvider>
+    </ThemeProvider>
   </React.StrictMode>,
 )
