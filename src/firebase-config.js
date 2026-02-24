@@ -5,12 +5,13 @@ import { getFirestore } from "firebase/firestore";
 // Your web app's Firebase configuration
 // REPLACE THESE with your actual Firebase config values
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_AUTH_DOMAIN",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_STORAGE_BUCKET",
-    messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyCmgHC2gFgHSX4jo58DqnXwTh38HUanAVM",
+    authDomain: "ecclesiasync-b40f8.firebaseapp.com",
+    projectId: "ecclesiasync-b40f8",
+    storageBucket: "ecclesiasync-b40f8.firebasestorage.app",
+    messagingSenderId: "449008382126",
+    appId: "1:449008382126:web:3ad0240a790ccd1205fd3f",
+    measurementId: "G-VCKLPVJ04J"
 };
 
 // Initialize Firebase
