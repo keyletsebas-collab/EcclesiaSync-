@@ -1,0 +1,40 @@
+﻿node.exe : 
+(node:8376) 
+[DEP0040] 
+DeprecationWarning: 
+The `punycode` 
+module is 
+deprecated. Please 
+use a userland 
+alternative instead.
+At line:1 char:1
++ & "C:\Program Files
+\nodejs/node.exe" 
+"C:\Program 
+Files\nodejs/node_mo 
+...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: ((node:8   
+ 376) [DE...nativ    
+e instead.:Strin    
+g) [], RemoteExc    
+eption
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+(Use `node 
+--trace-deprecation 
+...` to show where 
+the warning was 
+created)
+[36m[1mi [22m[39m The Firebase CLIΓÇÖs MCP server feature can optionally make use of Gemini in Firebase. Learn more about Gemini in Firebase and how it uses your data: https://firebase.google.com/docs/gemini-in-firebase#how-gemini-in-firebase-uses-your-data
+[34m?[39m [1mEnable Gemini in Firebase features?[22m [2m(Y/n)[22m[45G[46G[2K[G[34m?[39m [1mEnable Gemini in Firebase features?[22m [2m(Y/n)[22m n[46G[45G[2K[G[32mΓ£ö[39m [1mEnable Gemini in Firebase features?[22m [36mNo[39m[41G[42G[41G
+[?25h
+[36m[1mi [22m[39m Firebase optionally collects CLI and Emulator Suite usage and error reporting information to help improve our products. Data is collected in accordance with Google's privacy policy (https://policies.google.com/privacy) and is not used to identify you.
+[34m?[39m [1mAllow Firebase to collect CLI and Emulator Suite usage and error reporting [22m

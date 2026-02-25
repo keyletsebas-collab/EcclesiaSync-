@@ -4,8 +4,9 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --host",
-    "start": "npm run dev",
+    "dev": "concurrently \"npm run dev-client\" \"npm run server\"",
+    "dev-client": "vite --host",
+    "server": "node api/index.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -17,11 +18,9 @@
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
-    "firebase": "^12.9.0",
     "jspdf": "^4.1.0",
     "jspdf-autotable": "^5.0.7",
     "lucide-react": "^0.564.0",
-    "mysql2": "^3.17.4",
     "react": "^19.2.0",
     "react-dom": "^19.2.0",
     "uuid": "^13.0.0"

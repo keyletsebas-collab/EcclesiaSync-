@@ -1,16 +1,8 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
-import {
-    createUserWithEmailAndPassword,
-    signInWithEmailAndPassword,
-    signOut,
-    onAuthStateChanged,
-    updateProfile
-} from 'firebase/auth';
-import { doc, setDoc, getDoc, getDocs, collection, query, where, deleteDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '../firebase-config';
 
 const AuthContext = createContext();
-// Firebase Migration: API logic is being phased out
+
+const API_URL = ''; // Empty string means use same host (relative paths)
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -28,48 +20,24 @@ export const AuthProvider = ({ children }) => {
     });
 
     const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        const unsubscribe = onAuthStateChanged(auth, async (user) => {
-            if (user) {
-                // Fetch additional user data from Firestore
-                const userDoc = await getDoc(doc(db, 'users', user.uid));
-                if (userDoc.exists()) {
-                    const userData = userDoc.data();
-                    setCurrentUser({
-                        uid: user.uid,
-                        username: user.email,
-                        isMaster: userData.isMaster || false,
-                        accountId: userData.accountId
-                    });
-                } else {
-                    // Fallback if doc doesn't exist yet
-                    setCurrentUser({
-                        uid: user.uid,
-                        username: user.email,
-                        isMaster: false,
-                        accountId: user.uid.substring(0, 8).toUpperCase()
-                    });
-                }
-            } else {
-                setCurrentUser(null);
-            }
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
-    }, []);
+        if (currentUser) {
+            localStorage.setItem('app_current_user', JSON.stringify(currentUser));
+        } else {
+            localStorage.removeItem('app_current_user');
+        }
+    }, [currentUser]);
 
     const fetchUsers = async () => {
         if (!currentUser?.isMaster) return;
         try {
-            const querySnapshot = await getDocs(collection(db, 'users'));
-            const usersList = [];
-            querySnapshot.forEach((doc) => {
-                usersList.push({ ...doc.data(), uid: doc.id });
-            });
-            setUsers(usersList);
+            const response = await fetch(`${API_URL}/api/auth/users`);
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                setUsers(data);
+            }
         } catch (err) {
             console.error('Failed to fetch users:', err);
         }
@@ -77,41 +45,65 @@ export const AuthProvider = ({ children }) => {
 
     const signup = async (email, password, isMaster = false) => {
         try {
-            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-            const user = userCredential.user;
-            const accountId = Math.random().toString(36).substring(2, 10).toUpperCase();
-
-            const userData = {
-                username: email,
-                isMaster,
-                accountId,
-                createdAt: new Date().toISOString()
-            };
-
-            await setDoc(doc(db, 'users', user.uid), userData);
-
-            return { success: true, accountId };
+            const response = await fetch(`${API_URL}/api/auth/signup`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email, password, isMaster })
+            });
+            const data = await response.json();
+            if (data.success) {
+                const user = {
+                    uid: data.uid,
+                    username: data.username,
+                    isMaster: data.isMaster,
+                    accountId: data.accountId
+                };
+                setCurrentUser(user);
+                return { success: true };
+            }
+            return { success: false, error: data.error };
         } catch (err) {
             console.error('Signup error:', err);
-            return { success: false, error: err.message };
+            return { success: false, error: 'Server connection error' };
         }
     };
 
     const login = async (email, password) => {
         try {
-            await signInWithEmailAndPassword(auth, email, password);
-            return { success: true };
+            const response = await fetch(`${API_URL}/api/auth/login`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username: email, password })
+            });
+            const data = await response.json();
+            if (data.success) {
+                const user = {
+                    uid: data.uid,
+                    username: data.username,
+                    isMaster: data.isMaster,
+                    accountId: data.accountId
+                };
+                setCurrentUser(user);
+                return { success: true };
+            }
+            return { success: false, error: data.error };
         } catch (err) {
             console.error('Login error:', err);
-            return { success: false, error: err.message };
+            return { success: false, error: 'Server connection error' };
         }
     };
 
-    const logout = () => signOut(auth);
+    const logout = () => {
+        setCurrentUser(null);
+    };
 
     const updateUserRole = async (uid, updates) => {
         try {
-            await updateDoc(doc(db, 'users', uid), updates);
+            await fetch(`${API_URL}/api/auth/users/${uid}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updates)
+            });
             await fetchUsers();
         } catch (err) {
             console.error('Failed to update user role:', err);
@@ -120,7 +112,9 @@ export const AuthProvider = ({ children }) => {
 
     const deleteUser = async (uid) => {
         try {
-            await deleteDoc(doc(db, 'users', uid));
+            await fetch(`${API_URL}/api/auth/users/${uid}`, {
+                method: 'DELETE'
+            });
             await fetchUsers();
         } catch (err) {
             console.error('Failed to delete user:', err);

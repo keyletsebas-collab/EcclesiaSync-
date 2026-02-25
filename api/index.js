@@ -2,7 +2,7 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import { v4 as uuidv4 } from 'uuid';
-import pool from './db.js';
+import { storage } from './storage.js';
 
 dotenv.config();
 
@@ -21,17 +21,18 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.post('/api/auth/signup', async (req, res) => {
     const { username, password, isMaster = false } = req.body;
     try {
-        const [existing] = await pool.query('SELECT id FROM users WHERE username = ?', [username]);
-        if (existing.length > 0) {
+        const users = await storage.getUsers();
+        if (users.find(u => u.username === username)) {
             return res.status(400).json({ success: false, error: 'Username already exists' });
         }
         const accountId = uuidv4().substring(0, 8).toUpperCase();
+        const uid = uuidv4();
         const createdAt = new Date().toISOString();
-        await pool.query(
-            'INSERT INTO users (username, password, isMaster, accountId, createdAt) VALUES (?, ?, ?, ?, ?)',
-            [username, password, isMaster ? 1 : 0, accountId, createdAt]
-        );
-        res.json({ success: true, accountId, username, isMaster });
+
+        const newUser = { uid, username, password, isMaster: !!isMaster, accountId, createdAt };
+        await storage.addUser(newUser);
+
+        res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid });
     } catch (err) {
         console.error('Signup error:', err);
         res.status(500).json({ success: false, error: 'Server error' });
@@ -42,15 +43,13 @@ app.post('/api/auth/signup', async (req, res) => {
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
     try {
-        const [rows] = await pool.query(
-            'SELECT * FROM users WHERE username = ? AND password = ?',
-            [username, password]
-        );
-        if (rows.length === 0) {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.username === username && u.password === password);
+
+        if (!user) {
             return res.status(401).json({ success: false, error: 'Invalid username or password' });
         }
-        const user = rows[0];
-        res.json({ success: true, username: user.username, isMaster: !!user.isMaster, accountId: user.accountId });
+        res.json({ success: true, username: user.username, isMaster: !!user.isMaster, accountId: user.accountId, uid: user.uid });
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ success: false, error: 'Server error' });
@@ -60,19 +59,19 @@ app.post('/api/auth/login', async (req, res) => {
 // Get all users (admin)
 app.get('/api/auth/users', async (req, res) => {
     try {
-        const [rows] = await pool.query('SELECT username, isMaster, accountId, createdAt FROM users');
-        res.json(rows.map(u => ({ ...u, isMaster: !!u.isMaster })));
+        const users = await storage.getUsers();
+        res.json(users.map(({ password, ...u }) => u));
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
 });
 
 // Update user role
-app.put('/api/auth/users/:username', async (req, res) => {
-    const { username } = req.params;
+app.put('/api/auth/users/:uid', async (req, res) => {
+    const { uid } = req.params;
     const { isMaster } = req.body;
     try {
-        await pool.query('UPDATE users SET isMaster = ? WHERE username = ?', [isMaster ? 1 : 0, username]);
+        await storage.updateUser(uid, { isMaster: !!isMaster });
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -80,10 +79,10 @@ app.put('/api/auth/users/:username', async (req, res) => {
 });
 
 // Delete user
-app.delete('/api/auth/users/:username', async (req, res) => {
-    const { username } = req.params;
+app.delete('/api/auth/users/:uid', async (req, res) => {
+    const { uid } = req.params;
     try {
-        await pool.query('DELETE FROM users WHERE username = ?', [username]);
+        await storage.deleteUser(uid);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -92,21 +91,12 @@ app.delete('/api/auth/users/:username', async (req, res) => {
 
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
-// Get all templates
+// Get all templates (for an account)
 app.get('/api/templates', async (req, res) => {
+    const { accountId } = req.query;
     try {
-        const [rows] = await pool.query('SELECT * FROM templates ORDER BY createdAt DESC');
-        res.json(rows.map(r => ({ ...r, customFields: JSON.parse(r.customFields || '[]') })));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Alias for backward compatibility (ignoring accountId)
-app.get('/api/templates/:accountId', async (req, res) => {
-    try {
-        const [rows] = await pool.query('SELECT * FROM templates ORDER BY createdAt DESC');
-        res.json(rows.map(r => ({ ...r, customFields: JSON.parse(r.customFields || '[]') })));
+        const templates = await storage.getTemplates(accountId);
+        res.json(templates);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -118,11 +108,9 @@ app.post('/api/templates', async (req, res) => {
     const id = uuidv4();
     const createdAt = new Date().toISOString();
     try {
-        await pool.query(
-            'INSERT INTO templates (id, accountId, name, customFields, createdAt) VALUES (?, ?, ?, ?, ?)',
-            [id, accountId, name, JSON.stringify(customFields), createdAt]
-        );
-        res.json({ id, accountId, name, customFields, createdAt });
+        const newTemplate = { id, accountId, name, customFields, createdAt };
+        await storage.addTemplate(newTemplate);
+        res.json(newTemplate);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
@@ -130,25 +118,18 @@ app.post('/api/templates', async (req, res) => {
 
 // Update template
 app.put('/api/templates/:id', async (req, res) => {
-    const { name, customFields } = req.body;
     try {
-        await pool.query(
-            'UPDATE templates SET name = ?, customFields = ? WHERE id = ?',
-            [name, JSON.stringify(customFields || []), req.params.id]
-        );
+        await storage.updateTemplate(req.params.id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Delete template (and cascade members)
+// Delete template
 app.delete('/api/templates/:id', async (req, res) => {
-    const { id } = req.params;
     try {
-        await pool.query('DELETE FROM members WHERE templateId = ?', [id]);
-        await pool.query('DELETE FROM services WHERE templateId = ?', [id]);
-        await pool.query('DELETE FROM templates WHERE id = ?', [id]);
+        await storage.deleteTemplate(req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -157,21 +138,12 @@ app.delete('/api/templates/:id', async (req, res) => {
 
 // ─── MEMBERS ──────────────────────────────────────────────────────────────────
 
-// Get all members
+// Get members
 app.get('/api/members', async (req, res) => {
+    const { accountId } = req.query;
     try {
-        const [rows] = await pool.query('SELECT * FROM members ORDER BY name ASC');
-        res.json(rows.map(r => ({ ...r, identifications: JSON.parse(r.identifications || '{}') })));
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// Alias for backward compatibility
-app.get('/api/members/:accountId', async (req, res) => {
-    try {
-        const [rows] = await pool.query('SELECT * FROM members ORDER BY name ASC');
-        res.json(rows.map(r => ({ ...r, identifications: JSON.parse(r.identifications || '{}') })));
+        const members = await storage.getMembers(accountId);
+        res.json(members);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -183,11 +155,9 @@ app.post('/api/members', async (req, res) => {
     const id = uuidv4();
     const createdAt = new Date().toISOString();
     try {
-        await pool.query(
-            'INSERT INTO members (id, templateId, accountId, name, number, phone, identifications, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, templateId, accountId, name, number, phone, JSON.stringify(identifications), createdAt]
-        );
-        res.json({ id, templateId, accountId, name, number, phone, identifications, createdAt });
+        const newMember = { id, templateId, accountId, name, number, phone, identifications, createdAt };
+        await storage.addMember(newMember);
+        res.json(newMember);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
@@ -195,12 +165,8 @@ app.post('/api/members', async (req, res) => {
 
 // Update member
 app.put('/api/members/:id', async (req, res) => {
-    const { name, number, phone, identifications } = req.body;
     try {
-        await pool.query(
-            'UPDATE members SET name = ?, number = ?, phone = ?, identifications = ? WHERE id = ?',
-            [name, number, phone, JSON.stringify(identifications || {}), req.params.id]
-        );
+        await storage.updateMember(req.params.id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -210,8 +176,7 @@ app.put('/api/members/:id', async (req, res) => {
 // Delete member
 app.delete('/api/members/:id', async (req, res) => {
     try {
-        await pool.query('DELETE FROM services WHERE memberId = ?', [req.params.id]);
-        await pool.query('DELETE FROM members WHERE id = ?', [req.params.id]);
+        await storage.deleteMember(req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -220,21 +185,12 @@ app.delete('/api/members/:id', async (req, res) => {
 
 // ─── SERVICES ─────────────────────────────────────────────────────────────────
 
-// Get all services
+// Get services
 app.get('/api/services', async (req, res) => {
+    const { accountId } = req.query;
     try {
-        const [rows] = await pool.query('SELECT * FROM services ORDER BY serviceDate ASC');
-        res.json(rows);
-    } catch (err) {
-        res.status(500).json({ error: err.message });
-    }
-});
-
-// For backward compatibility (ignoring accountId)
-app.get('/api/services/:accountId', async (req, res) => {
-    try {
-        const [rows] = await pool.query('SELECT * FROM services ORDER BY serviceDate ASC');
-        res.json(rows);
+        const services = await storage.getServices(accountId);
+        res.json(services);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -246,11 +202,9 @@ app.post('/api/services', async (req, res) => {
     const id = uuidv4();
     const createdAt = new Date().toISOString();
     try {
-        await pool.query(
-            'INSERT INTO services (id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-            [id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt]
-        );
-        res.json({ id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt });
+        const newService = { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt };
+        await storage.addService(newService);
+        res.json(newService);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
@@ -258,12 +212,8 @@ app.post('/api/services', async (req, res) => {
 
 // Update service
 app.put('/api/services/:id', async (req, res) => {
-    const { memberName, serviceDate, serviceType } = req.body;
     try {
-        await pool.query(
-            'UPDATE services SET memberName = ?, serviceDate = ?, serviceType = ? WHERE id = ?',
-            [memberName, serviceDate, serviceType, req.params.id]
-        );
+        await storage.updateService(req.params.id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -273,7 +223,7 @@ app.put('/api/services/:id', async (req, res) => {
 // Delete service
 app.delete('/api/services/:id', async (req, res) => {
     try {
-        await pool.query('DELETE FROM services WHERE id = ?', [req.params.id]);
+        await storage.deleteService(req.params.id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -284,10 +234,7 @@ app.delete('/api/services/:id', async (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-        // Diagnostic connection test
-        pool.query('SELECT 1')
-            .then(() => console.log('✅ DATABASE STATUS: CONNECTED (sql3.freesqldatabase.com)'))
-            .catch(err => console.error('❌ DATABASE STATUS: FAILED', err.message));
+        console.log(`📂 Using Local JSON storage at db.json`);
     });
 }
 

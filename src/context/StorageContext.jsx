@@ -1,16 +1,8 @@
-import {
-    collection,
-    addDoc,
-    updateDoc,
-    deleteDoc,
-    doc,
-    onSnapshot,
-    query,
-    where,
-    orderBy,
-    setDoc
-} from 'firebase/firestore';
-import { db } from '../firebase-config';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+
+const StorageContext = createContext();
+
+const API_URL = '';
 
 export const useStorage = () => {
     return useContext(StorageContext);
@@ -22,57 +14,44 @@ export const StorageProvider = ({ children, accountId }) => {
     const [services, setServices] = useState([]);
     const [loading, setLoading] = useState(false);
 
-    // Load all data with real-time listeners
-    useEffect(() => {
+    const fetchData = async () => {
         if (!accountId) return;
-
         setLoading(true);
+        try {
+            const [tRes, mRes, sRes] = await Promise.all([
+                fetch(`${API_URL}/api/templates?accountId=${accountId}`),
+                fetch(`${API_URL}/api/members?accountId=${accountId}`),
+                fetch(`${API_URL}/api/services?accountId=${accountId}`)
+            ]);
 
-        // Templates Listener
-        const qTemplates = query(collection(db, 'templates'), where('accountId', '==', accountId), orderBy('createdAt', 'desc'));
-        const unsubTemplates = onSnapshot(qTemplates, (snapshot) => {
-            const t = [];
-            snapshot.forEach((doc) => t.push({ id: doc.id, ...doc.data() }));
-            setTemplates(t);
+            const [tData, mData, sData] = await Promise.all([
+                tRes.json(), mRes.json(), sRes.json()
+            ]);
+
+            if (Array.isArray(tData)) setTemplates(tData);
+            if (Array.isArray(mData)) setMembers(mData);
+            if (Array.isArray(sData)) setServices(sData);
+        } catch (err) {
+            console.error('Failed to fetch data:', err);
+        } finally {
             setLoading(false);
-        }, (err) => {
-            console.error('Templates listener error:', err);
-            setLoading(false);
-        });
+        }
+    };
 
-        // Members Listener
-        const qMembers = query(collection(db, 'members'), where('accountId', '==', accountId), orderBy('name', 'asc'));
-        const unsubMembers = onSnapshot(qMembers, (snapshot) => {
-            const m = [];
-            snapshot.forEach((doc) => m.push({ id: doc.id, ...doc.data() }));
-            setMembers(m);
-        });
-
-        // Services Listener
-        const qServices = query(collection(db, 'services'), where('accountId', '==', accountId), orderBy('serviceDate', 'asc'));
-        const unsubServices = onSnapshot(qServices, (snapshot) => {
-            const s = [];
-            snapshot.forEach((doc) => s.push({ id: doc.id, ...doc.data() }));
-            setServices(s);
-        });
-
-        return () => {
-            unsubTemplates();
-            unsubMembers();
-            unsubServices();
-        };
+    useEffect(() => {
+        fetchData();
     }, [accountId]);
 
     // ── Template Actions ──────────────────────────────────────────────────────
 
     const addTemplate = async (name, customFields = []) => {
         try {
-            await addDoc(collection(db, 'templates'), {
-                accountId,
-                name,
-                customFields,
-                createdAt: new Date().toISOString()
+            await fetch(`${API_URL}/api/templates`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ accountId, name, customFields })
             });
+            await fetchData();
         } catch (err) {
             console.error('Failed to add template:', err);
         }
@@ -80,7 +59,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateTemplate = async (id, updatedData) => {
         try {
-            await updateDoc(doc(db, 'templates', id), updatedData);
+            await fetch(`${API_URL}/api/templates/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedData)
+            });
+            await fetchData();
         } catch (err) {
             console.error('Failed to update template:', err);
         }
@@ -88,15 +72,8 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteTemplate = async (id) => {
         try {
-            await deleteDoc(doc(db, 'templates', id));
-            // Cleanup cascade for Firestore (manual cleanup needed unlike some SQL triggers)
-            const mQuery = query(collection(db, 'members'), where('templateId', '==', id));
-            const mSnap = await getDocs(mQuery);
-            mSnap.forEach(async (mDoc) => await deleteDoc(doc(db, 'members', mDoc.id)));
-
-            const sQuery = query(collection(db, 'services'), where('templateId', '==', id));
-            const sSnap = await getDocs(sQuery);
-            sSnap.forEach(async (sDoc) => await deleteDoc(doc(db, 'services', sDoc.id)));
+            await fetch(`${API_URL}/api/templates/${id}`, { method: 'DELETE' });
+            await fetchData();
         } catch (err) {
             console.error('Failed to delete template:', err);
         }
@@ -106,12 +83,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const addMember = async (templateId, memberData) => {
         try {
-            await addDoc(collection(db, 'members'), {
-                templateId,
-                accountId,
-                ...memberData,
-                createdAt: new Date().toISOString()
+            await fetch(`${API_URL}/api/members`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ templateId, accountId, ...memberData })
             });
+            await fetchData();
         } catch (err) {
             console.error('Failed to add member:', err);
         }
@@ -119,7 +96,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateMember = async (id, updatedData) => {
         try {
-            await updateDoc(doc(db, 'members', id), updatedData);
+            await fetch(`${API_URL}/api/members/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedData)
+            });
+            await fetchData();
         } catch (err) {
             console.error('Failed to update member:', err);
         }
@@ -127,10 +109,8 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteMember = async (id) => {
         try {
-            await deleteDoc(doc(db, 'members', id));
-            const sQuery = query(collection(db, 'services'), where('memberId', '==', id));
-            const sSnap = await getDocs(sQuery);
-            sSnap.forEach(async (sDoc) => await deleteDoc(doc(db, 'services', sDoc.id)));
+            await fetch(`${API_URL}/api/members/${id}`, { method: 'DELETE' });
+            await fetchData();
         } catch (err) {
             console.error('Failed to delete member:', err);
         }
@@ -140,15 +120,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '') => {
         try {
-            await addDoc(collection(db, 'services'), {
-                templateId,
-                memberId,
-                accountId,
-                memberName,
-                serviceDate,
-                serviceType,
-                createdAt: new Date().toISOString()
+            await fetch(`${API_URL}/api/services`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ templateId, memberId, accountId, memberName, serviceDate, serviceType })
             });
+            await fetchData();
         } catch (err) {
             console.error('Failed to add service:', err);
         }
@@ -156,7 +133,12 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const updateService = async (id, updatedData) => {
         try {
-            await updateDoc(doc(db, 'services', id), updatedData);
+            await fetch(`${API_URL}/api/services/${id}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(updatedData)
+            });
+            await fetchData();
         } catch (err) {
             console.error('Failed to update service:', err);
         }
@@ -164,7 +146,8 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteService = async (id) => {
         try {
-            await deleteDoc(doc(db, 'services', id));
+            await fetch(`${API_URL}/api/services/${id}`, { method: 'DELETE' });
+            await fetchData();
         } catch (err) {
             console.error('Failed to delete service:', err);
         }
@@ -183,7 +166,8 @@ export const StorageProvider = ({ children, accountId }) => {
         deleteMember,
         addService,
         updateService,
-        deleteService
+        deleteService,
+        refreshData: fetchData
     };
 
     return (
