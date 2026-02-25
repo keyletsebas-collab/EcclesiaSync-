@@ -312,6 +312,7 @@ const TemplateView = ({ templateId }) => {
                     <div style={{ marginBottom: '1rem' }}>
                         <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
                             {t('accountIdLabel')}
+                            <span style={{ color: '#f87171', marginLeft: '0.25rem' }}>*</span>
                         </label>
                         <input
                             className="glass-input"
@@ -319,12 +320,16 @@ const TemplateView = ({ templateId }) => {
                             onChange={e => setNewMember({ ...newMember, accountId: e.target.value.toUpperCase() })}
                             placeholder="XXXXXXXX"
                             maxLength={8}
+                            required
                             style={{
                                 fontFamily: 'monospace',
                                 letterSpacing: '0.1em',
                                 textTransform: 'uppercase'
                             }}
                         />
+                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
+                            🔑 {t('accountIdRequired') || 'El ID de cuenta es obligatorio para añadir a la persona.'}
+                        </p>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
