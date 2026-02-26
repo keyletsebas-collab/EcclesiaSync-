@@ -1,156 +1,171 @@
-import fs from 'fs/promises';
-import path from 'path';
+import base from './db.js';
 
 /**
- * EcclesiaSync Storage Layer - Zero-Console Version
- * - Local: Uses db.json
- * - Production (Vercel): 
- *   1. Primary: Vercel KV (if connected)
- *   2. Fallback: Guaranteed persistence via a secure Cloud Bucket (KVdb)
+ * EcclesiaSync Storage Layer — Airtable
+ *
+ * Airtable table structure required (create these in your Base):
+ *
+ *  ┌─ Users ──────────────────────────────────────────────────────────┐
+ *  │  uid (Single line text)   username (Single line text, unique)    │
+ *  │  password (Single line)   isMaster (Checkbox)                    │
+ *  │  accountId (Single line)  createdAt (Single line)                │
+ *  └──────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌─ Templates ──────────────────────────────────────────────────────┐
+ *  │  id (Single line)   accountId (Single line)   name (Single line) │
+ *  │  customFields (Long text / JSON)   createdAt (Single line)       │
+ *  └──────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌─ Members ────────────────────────────────────────────────────────┐
+ *  │  id (Single line)      templateId (Single line)                  │
+ *  │  accountId (Single)    name (Single line)   number (Number)      │
+ *  │  phone (Single line)   identifications (Long text / JSON)        │
+ *  │  createdAt (Single line)                                         │
+ *  └──────────────────────────────────────────────────────────────────┘
+ *
+ *  ┌─ Services ───────────────────────────────────────────────────────┐
+ *  │  id (Single)       templateId (Single)    memberId (Single)      │
+ *  │  accountId (Single)  memberName (Single)  serviceDate (Single)   │
+ *  │  serviceType (Single)  createdAt (Single)                        │
+ *  └──────────────────────────────────────────────────────────────────┘
  */
 
-const DB_PATH = path.join(process.cwd(), 'db.json');
-const IS_VERCEL = process.env.VERCEL === '1';
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
-// This is a secure, unique bucket ID for EcclesiaSync
-// No manual setup required, it just works.
-const KVDB_BUCKET = 'ecclesisync_live_82f1a9d0d3b6e8';
-const KVDB_URL = `https://kvdb.io/${KVDB_BUCKET}/church_db`;
-
-const INITIAL_DATA = {
-    users: [],
-    templates: [],
-    members: [],
-    services: []
-};
-
-async function readData() {
-    if (IS_VERCEL) {
-        try {
-            // Priority: Cloud Persistence
-            const response = await fetch(KVDB_URL);
-            if (response.status === 200) {
-                return await response.json();
-            }
-        } catch (err) {
-            console.error('Cloud storage read error, using initial data:', err);
-        }
-        return INITIAL_DATA;
-    }
-
-    // Local Development
-    try {
-        const content = await fs.readFile(DB_PATH, 'utf-8');
-        return JSON.parse(content);
-    } catch (err) {
-        await writeData(INITIAL_DATA);
-        return INITIAL_DATA;
-    }
+/** Convierte un record de Airtable a objeto plano */
+function toObj(record) {
+    return { _recId: record.id, ...record.fields };
 }
 
-async function writeData(data) {
-    if (IS_VERCEL) {
-        try {
-            await fetch(KVDB_URL, {
-                method: 'POST',
-                body: JSON.stringify(data)
-            });
-            return;
-        } catch (err) {
-            console.error('Cloud storage write error:', err);
-        }
-    }
-
-    // Local Development
-    await fs.writeFile(DB_PATH, JSON.stringify(data, null, 2));
+/** Obtiene todos los registros de una tabla con filtro opcional */
+async function getAll(table, formula = '') {
+    const records = [];
+    const opts = formula ? { filterByFormula: formula } : {};
+    await base(table).select(opts).eachPage((page, next) => {
+        page.forEach(r => records.push(toObj(r)));
+        next();
+    });
+    return records;
 }
+
+/** JSON stringify seguro para campos que deben ser strings */
+const jsonStr = v => (typeof v === 'object' ? JSON.stringify(v) : v ?? '');
+
+// ─── Storage API ──────────────────────────────────────────────────────────────
 
 export const storage = {
-    // Users
-    getUsers: async () => (await readData()).users,
+
+    // ── Users ─────────────────────────────────────────────────────────────────
+
+    getUsers: () => getAll('Users'),
+
     addUser: async (user) => {
-        const data = await readData();
-        data.users.push(user);
-        await writeData(data);
+        const { uid, username, password, isMaster, accountId, createdAt } = user;
+        await base('Users').create([{
+            fields: { uid, username, password, isMaster: !!isMaster, accountId, createdAt }
+        }]);
         return user;
     },
+
     updateUser: async (uid, updates) => {
-        const data = await readData();
-        data.users = data.users.map(u => u.uid === uid ? { ...u, ...updates } : u);
-        await writeData(data);
-    },
-    deleteUser: async (uid) => {
-        const data = await readData();
-        data.users = data.users.filter(u => u.uid !== uid);
-        await writeData(data);
+        // Buscar el record ID de Airtable primero
+        const records = await getAll('Users', `{uid} = '${uid}'`);
+        if (!records.length) return;
+        await base('Users').update(records[0]._recId, updates);
     },
 
-    // Templates
-    getTemplates: async (accountId) => {
-        const data = await readData();
-        return data.templates.filter(t => t.accountId === accountId);
+    deleteUser: async (uid) => {
+        const records = await getAll('Users', `{uid} = '${uid}'`);
+        if (records.length) await base('Users').destroy(records[0]._recId);
     },
+
+    // ── Templates ─────────────────────────────────────────────────────────────
+
+    getTemplates: (accountId) =>
+        getAll('Templates', `{accountId} = '${accountId}'`),
+
     addTemplate: async (template) => {
-        const data = await readData();
-        data.templates.push(template);
-        await writeData(data);
+        const { id, accountId, name, customFields, createdAt } = template;
+        await base('Templates').create([{
+            fields: { id, accountId, name, customFields: jsonStr(customFields), createdAt }
+        }]);
         return template;
     },
+
     updateTemplate: async (id, updates) => {
-        const data = await readData();
-        data.templates = data.templates.map(t => t.id === id ? { ...t, ...updates } : t);
-        await writeData(data);
-    },
-    deleteTemplate: async (id) => {
-        const data = await readData();
-        data.templates = data.templates.filter(t => t.id !== id);
-        data.members = data.members.filter(m => m.templateId !== id);
-        data.services = data.services.filter(s => s.templateId !== id);
-        await writeData(data);
+        const records = await getAll('Templates', `{id} = '${id}'`);
+        if (!records.length) return;
+        const fields = { ...updates };
+        if (fields.customFields) fields.customFields = jsonStr(fields.customFields);
+        await base('Templates').update(records[0]._recId, fields);
     },
 
-    // Members
-    getMembers: async (accountId) => {
-        const data = await readData();
-        return data.members.filter(m => m.accountId === accountId);
+    deleteTemplate: async (id) => {
+        // Borrar services y members dependientes primero
+        const services = await getAll('Services', `{templateId} = '${id}'`);
+        const members = await getAll('Members', `{templateId} = '${id}'`);
+        for (const r of services) await base('Services').destroy(r._recId);
+        for (const r of members) await base('Members').destroy(r._recId);
+        const templates = await getAll('Templates', `{id} = '${id}'`);
+        if (templates.length) await base('Templates').destroy(templates[0]._recId);
     },
+
+    // ── Members ───────────────────────────────────────────────────────────────
+
+    getMembers: (accountId) =>
+        getAll('Members', `{accountId} = '${accountId}'`),
+
     addMember: async (member) => {
-        const data = await readData();
-        data.members.push(member);
-        await writeData(data);
+        const { id, templateId, accountId, name, number, phone, identifications, createdAt } = member;
+        await base('Members').create([{
+            fields: {
+                id, templateId, accountId,
+                name: name ?? '',
+                number: number ?? 0,
+                phone: phone ?? '',
+                identifications: jsonStr(identifications),
+                createdAt
+            }
+        }]);
         return member;
     },
+
     updateMember: async (id, updates) => {
-        const data = await readData();
-        data.members = data.members.map(m => m.id === id ? { ...m, ...updates } : m);
-        await writeData(data);
-    },
-    deleteMember: async (id) => {
-        const data = await readData();
-        data.members = data.members.filter(m => m.id !== id);
-        data.services = data.services.filter(s => s.memberId !== id);
-        await writeData(data);
+        const records = await getAll('Members', `{id} = '${id}'`);
+        if (!records.length) return;
+        const fields = { ...updates };
+        if (fields.identifications) fields.identifications = jsonStr(fields.identifications);
+        await base('Members').update(records[0]._recId, fields);
     },
 
-    // Services
-    getServices: async (accountId) => {
-        const data = await readData();
-        return data.services.filter(s => s.accountId === accountId);
+    deleteMember: async (id) => {
+        const services = await getAll('Services', `{memberId} = '${id}'`);
+        for (const r of services) await base('Services').destroy(r._recId);
+        const members = await getAll('Members', `{id} = '${id}'`);
+        if (members.length) await base('Members').destroy(members[0]._recId);
     },
+
+    // ── Services ──────────────────────────────────────────────────────────────
+
+    getServices: (accountId) =>
+        getAll('Services', `{accountId} = '${accountId}'`),
+
     addService: async (service) => {
-        const data = await readData();
-        data.services.push(service);
-        await writeData(data);
+        const { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt } = service;
+        await base('Services').create([{
+            fields: { id, templateId, memberId, accountId, memberName, serviceDate, serviceType: serviceType ?? '', createdAt }
+        }]);
         return service;
     },
+
     updateService: async (id, updates) => {
-        const data = await readData();
-        data.services = data.services.map(s => s.id === id ? { ...s, ...updates } : s);
-        await writeData(data);
+        const records = await getAll('Services', `{id} = '${id}'`);
+        if (!records.length) return;
+        await base('Services').update(records[0]._recId, updates);
     },
+
     deleteService: async (id) => {
-        const data = await readData();
-        data.services = data.services.filter(s => s.id !== id);
-        await writeData(data);
+        const records = await getAll('Services', `{id} = '${id}'`);
+        if (records.length) await base('Services').destroy(records[0]._recId);
     }
 };

@@ -234,7 +234,7 @@ app.delete('/api/services/:id', async (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-        console.log(`📂 Using Local JSON storage at db.json`);
+        console.log(`� Using PostgreSQL at ${process.env.DATABASE_URL?.split('@')[1] ?? 'configured DB'}`);
     });
 }
 

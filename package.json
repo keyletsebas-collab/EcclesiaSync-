@@ -7,6 +7,7 @@
     "dev": "concurrently \"npm run dev-client\" \"npm run server\"",
     "dev-client": "vite --host",
     "server": "node api/index.js",
+    "db:init": "node api/init-db.js",
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview"
@@ -15,6 +16,7 @@
     "@capacitor/android": "^8.1.0",
     "@capacitor/cli": "^8.1.0",
     "@capacitor/core": "^8.1.0",
+    "airtable": "^0.12.2",
     "cors": "^2.8.6",
     "dotenv": "^17.3.1",
     "express": "^5.2.1",
