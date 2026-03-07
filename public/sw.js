@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ecclesia-v2';
+const CACHE_NAME = 'ecclesia-v3';
 const urlsToCache = [
     '/',
     '/index.html',
