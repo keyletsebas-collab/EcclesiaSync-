@@ -101,7 +101,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                             padding: '0.75rem 1rem',
                             borderRadius: '10px',
                             border: '1px solid var(--border)',
-                            background: 'rgba(255, 255, 255, 0.03)',
+                            background: 'var(--bg-glass)',
                             color: 'var(--text-main)',
                             cursor: 'pointer',
                             transition: 'all 0.2s',

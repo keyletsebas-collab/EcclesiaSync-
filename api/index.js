@@ -35,7 +35,7 @@ app.post('/api/auth/signup', async (req, res) => {
         res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid });
     } catch (err) {
         console.error('Signup error:', err);
-        res.status(500).json({ success: false, error: 'Server error' });
+        res.status(500).json({ success: false, error: err.message || 'Server error' });
     }
 });
 
@@ -49,10 +49,13 @@ app.post('/api/auth/login', async (req, res) => {
         if (!user) {
             return res.status(401).json({ success: false, error: 'Invalid username or password' });
         }
+        if (user.isBlocked) {
+            return res.status(403).json({ success: false, error: 'Account is blocked' });
+        }
         res.json({ success: true, username: user.username, isMaster: !!user.isMaster, accountId: user.accountId, uid: user.uid });
     } catch (err) {
         console.error('Login error:', err);
-        res.status(500).json({ success: false, error: 'Server error' });
+        res.status(500).json({ success: false, error: err.message || 'Server error' });
     }
 });
 
@@ -60,18 +63,21 @@ app.post('/api/auth/login', async (req, res) => {
 app.get('/api/auth/users', async (req, res) => {
     try {
         const users = await storage.getUsers();
-        res.json(users.map(({ password, ...u }) => u));
+        // Return all fields including password and isBlocked for master inspection
+        res.json(users);
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
     }
 });
 
-// Update user role
+// Update user (role and/or block status)
 app.put('/api/auth/users/:uid', async (req, res) => {
     const { uid } = req.params;
-    const { isMaster } = req.body;
+    const updates = {};
+    if (req.body.isMaster !== undefined) updates.isMaster = !!req.body.isMaster;
+    if (req.body.isBlocked !== undefined) updates.isBlocked = !!req.body.isBlocked;
     try {
-        await storage.updateUser(uid, { isMaster: !!isMaster });
+        await storage.updateUser(uid, updates);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -234,7 +240,7 @@ app.delete('/api/services/:id', async (req, res) => {
 if (process.env.NODE_ENV !== 'production') {
     app.listen(PORT, () => {
         console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-        console.log(`� Using PostgreSQL at ${process.env.DATABASE_URL?.split('@')[1] ?? 'configured DB'}`);
+        console.log(`🚀 Using Airtable base: ${process.env.AIRTABLE_BASE_ID}`);
     });
 }
 

@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-const API_URL = ''; // Empty string means use same host (relative paths)
+const API_URL = import.meta.env.PROD ? 'https://ecclesiasync.vercel.app' : '';
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading] = useState(false);
 
     useEffect(() => {
         if (currentUser) {
@@ -68,6 +68,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+
     const login = async (email, password) => {
         try {
             const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -110,6 +111,19 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const toggleBlockUser = async (uid, isBlocked) => {
+        try {
+            await fetch(`${API_URL}/api/auth/users/${uid}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ isBlocked })
+            });
+            await fetchUsers();
+        } catch (err) {
+            console.error('Failed to toggle block:', err);
+        }
+    };
+
     const deleteUser = async (uid) => {
         try {
             await fetch(`${API_URL}/api/auth/users/${uid}`, {
@@ -130,6 +144,7 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         updateUserRole,
+        toggleBlockUser,
         deleteUser,
         fetchUsers
     };

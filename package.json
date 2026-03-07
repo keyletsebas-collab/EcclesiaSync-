@@ -7,6 +7,7 @@
     "dev": "concurrently \"npm run dev-client\" \"npm run server\"",
     "dev-client": "vite --host",
     "server": "node api/index.js",
+    "start": "npm run dev",
     "db:init": "node api/init-db.js",
     "build": "vite build",
     "lint": "eslint .",

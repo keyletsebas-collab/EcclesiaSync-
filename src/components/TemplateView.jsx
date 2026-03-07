@@ -221,7 +221,7 @@ const TemplateView = ({ templateId }) => {
                                     </tr>
                                 ) : filteredMembers.map(member => (
                                     <tr key={member.id}>
-                                        <td style={{ fontWeight: 500, color: '#fff' }}>
+                                        <td style={{ fontWeight: 500, color: 'var(--text-main)' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                                                 {member.name}
                                                 {member.isLeader && (

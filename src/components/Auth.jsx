@@ -46,7 +46,10 @@ const Auth = () => {
             : await signup(username, password, isMaster);
 
         if (!result.success) {
-            setError(result.error);
+            const msg = result.error === 'Account is blocked'
+                ? '🔒 Tu cuenta ha sido bloqueada. Contacta al administrador.'
+                : result.error;
+            setError(msg);
         } else if (!isLogin && result.accountId) {
             // Show account ID briefly after signup
             setSuccessMessage(`Account created! Your Account ID: ${result.accountId}`);

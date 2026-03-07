@@ -59,12 +59,15 @@ function App() {
     if (!newTemplateName.trim()) return;
 
     const fields = newTemplateFields.filter(f => f.trim() !== '');
-    await addTemplate(newTemplateName, fields);
-
-    // Reset and close
-    setNewTemplateName('');
-    setNewTemplateFields(['']);
-    setIsNewTemplateModalOpen(false);
+    try {
+      await addTemplate(newTemplateName, fields);
+      // Reset and close
+      setNewTemplateName('');
+      setNewTemplateFields(['']);
+      setIsNewTemplateModalOpen(false);
+    } catch (err) {
+      alert(`No se pudo crear la plantilla: ${err.message}`);
+    }
   };
 
   const handleAddField = () => {

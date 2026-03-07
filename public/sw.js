@@ -2,7 +2,8 @@ const CACHE_NAME = 'ecclesia-v2';
 const urlsToCache = [
     '/',
     '/index.html',
-    '/vite.svg'
+    '/icon-192.png',
+    '/icon-512.png'
 ];
 
 // Install event - cache resources

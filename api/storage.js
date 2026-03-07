@@ -39,13 +39,14 @@ function toObj(record) {
 
 /** Obtiene todos los registros de una tabla con filtro opcional */
 async function getAll(table, formula = '') {
-    const records = [];
-    const opts = formula ? { filterByFormula: formula } : {};
-    await base(table).select(opts).eachPage((page, next) => {
-        page.forEach(r => records.push(toObj(r)));
-        next();
-    });
-    return records;
+    try {
+        const opts = formula ? { filterByFormula: formula } : {};
+        const records = await base(table).select(opts).all();
+        return records.map(toObj);
+    } catch (err) {
+        console.error(`Airtable error fetching from ${table}:`, err);
+        throw err;
+    }
 }
 
 /** JSON stringify seguro para campos que deben ser strings */
@@ -62,7 +63,7 @@ export const storage = {
     addUser: async (user) => {
         const { uid, username, password, isMaster, accountId, createdAt } = user;
         await base('Users').create([{
-            fields: { uid, username, password, isMaster: !!isMaster, accountId, createdAt }
+            fields: { uid, username, password, isMaster: !!isMaster, accountId, createdAt, isBlocked: false }
         }]);
         return user;
     },

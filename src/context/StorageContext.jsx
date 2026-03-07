@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const StorageContext = createContext();
 
-const API_URL = '';
+const API_URL = import.meta.env.PROD ? 'https://ecclesiasync.vercel.app' : '';
 
 export const useStorage = () => {
     return useContext(StorageContext);
@@ -46,14 +46,21 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const addTemplate = async (name, customFields = []) => {
         try {
-            await fetch(`${API_URL}/api/templates`, {
+            const res = await fetch(`${API_URL}/api/templates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ accountId, name, customFields })
             });
+
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                throw new Error(data.error || `Error del servidor: ${res.status}`);
+            }
+
             await fetchData();
         } catch (err) {
             console.error('Failed to add template:', err);
+            throw err; // Re-throw to be caught by the component
         }
     };
 
