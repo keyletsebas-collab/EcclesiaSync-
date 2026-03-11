@@ -32,20 +32,66 @@ import base from './db.js';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-/** Convierte un record de Airtable a objeto plano */
+/** Convierte un record de Airtable a objeto plano y parsea campos JSON */
 function toObj(record) {
-    return { _recId: record.id, ...record.fields };
+    if (!record) return null;
+    try {
+        const fields = { ...record.fields };
+        
+        // Parse customFields (should be an array)
+        if (typeof fields.customFields === 'string') {
+            try { fields.customFields = JSON.parse(fields.customFields); } catch (e) { fields.customFields = []; }
+        } else if (!Array.isArray(fields.customFields)) {
+            fields.customFields = [];
+        }
+
+        // Parse identifications (should be an object)
+        if (typeof fields.identifications === 'string') {
+            try { fields.identifications = JSON.parse(fields.identifications); } catch (e) { fields.identifications = {}; }
+        } else if (!fields.identifications || typeof fields.identifications !== 'object') {
+            fields.identifications = {};
+        }
+
+        // Ensure common fields have defaults to prevent UI rendering issues
+        fields.name = fields.name ?? '';
+        fields.phone = fields.phone ?? '';
+        fields.accountId = fields.accountId ?? '';
+        fields.serviceType = fields.serviceType ?? '';
+        
+        return { _recId: record.id, ...fields };
+    } catch (e) {
+        console.error('Mapping error for record:', record.id, e);
+        return { _recId: record.id };
+    }
 }
 
-/** Obtiene todos los registros de una tabla con filtro opcional */
-async function getAll(table, formula = '') {
+/** Obtiene todos los registros de una tabla con filtro opcional.
+ * Si el filtro falla por campo desconocido, reintenta sin filtro y filtra en JS. */
+async function getAll(table, formula = '', fallbackFilter = null) {
     try {
         const opts = formula ? { filterByFormula: formula } : {};
         const records = await base(table).select(opts).all();
         return records.map(toObj);
     } catch (err) {
-        console.error(`Airtable error fetching from ${table}:`, err);
-        throw err;
+        if (err.message?.includes('Unknown field names') && fallbackFilter) {
+            console.warn(`⚠️ Schema mismatch in "${table}": ${err.message}`);
+            console.warn(`💡 Fetching all records and filtering in JS (fallback mode).`);
+            console.warn(`💡 To fix permanently, run: node api/setup-tables.js`);
+            try {
+                const records = await base(table).select({}).all();
+                return records.map(toObj).filter(fallbackFilter);
+            } catch (err2) {
+                console.error(`Airtable error fetching from ${table} (fallback):`, err2.message);
+                return [];
+            }
+        }
+        if (err.message?.includes('Unknown field names')) {
+            console.error(`⚠️ Schema mismatch in table "${table}": ${err.message}`);
+            console.log(`💡 Try running: node api/setup-tables.js to fix the schema.`);
+        } else {
+            console.error(`Airtable error fetching from ${table}:`, err.message);
+        }
+        return [];
     }
 }
 
@@ -83,7 +129,7 @@ export const storage = {
     // ── Templates ─────────────────────────────────────────────────────────────
 
     getTemplates: (accountId) =>
-        getAll('Templates', `{accountId} = '${accountId}'`),
+        getAll('Templates', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
 
     addTemplate: async (template) => {
         const { id, accountId, name, customFields, createdAt } = template;
@@ -103,7 +149,7 @@ export const storage = {
 
     deleteTemplate: async (id) => {
         // Borrar services y members dependientes primero
-        const services = await getAll('Services', `{templateId} = '${id}'`);
+        const services = await getAll('Services', `{templateId} = '${id}'`, r => r.templateId === id);
         const members = await getAll('Members', `{templateId} = '${id}'`);
         for (const r of services) await base('Services').destroy(r._recId);
         for (const r of members) await base('Members').destroy(r._recId);
@@ -114,7 +160,7 @@ export const storage = {
     // ── Members ───────────────────────────────────────────────────────────────
 
     getMembers: (accountId) =>
-        getAll('Members', `{accountId} = '${accountId}'`),
+        getAll('Members', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
 
     addMember: async (member) => {
         const { id, templateId, accountId, name, number, phone, identifications, createdAt } = member;
@@ -140,7 +186,7 @@ export const storage = {
     },
 
     deleteMember: async (id) => {
-        const services = await getAll('Services', `{memberId} = '${id}'`);
+        const services = await getAll('Services', `{memberId} = '${id}'`, r => r.memberId === id);
         for (const r of services) await base('Services').destroy(r._recId);
         const members = await getAll('Members', `{id} = '${id}'`);
         if (members.length) await base('Members').destroy(members[0]._recId);
@@ -149,7 +195,7 @@ export const storage = {
     // ── Services ──────────────────────────────────────────────────────────────
 
     getServices: (accountId) =>
-        getAll('Services', `{accountId} = '${accountId}'`),
+        getAll('Services', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
 
     addService: async (service) => {
         const { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt } = service;

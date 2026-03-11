@@ -42,11 +42,14 @@ app.post('/api/auth/signup', async (req, res) => {
 // Login
 app.post('/api/auth/login', async (req, res) => {
     const { username, password } = req.body;
+    console.log(`🔑 Login attempt for: ${username}`);
     try {
         const users = await storage.getUsers();
+        console.log(`👥 Total users found in Airtable: ${users.length}`);
         const user = users.find(u => u.username === username && u.password === password);
 
         if (!user) {
+            console.log(`❌ Login failed: User not found or password mismatch`);
             return res.status(401).json({ success: false, error: 'Invalid username or password' });
         }
         if (user.isBlocked) {
@@ -118,7 +121,8 @@ app.post('/api/templates', async (req, res) => {
         await storage.addTemplate(newTemplate);
         res.json(newTemplate);
     } catch (err) {
-        res.status(500).json({ error: 'Server error' });
+        console.error('Create template error:', err);
+        res.status(500).json({ error: err.message || 'Server error' });
     }
 });
 
@@ -237,11 +241,10 @@ app.delete('/api/services/:id', async (req, res) => {
 });
 
 // ─── Start Server ─────────────────────────────────────────────────────────────
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-        console.log(`🚀 Using Airtable base: ${process.env.AIRTABLE_BASE_ID}`);
-    });
-}
+// ─── Start Server ─────────────────────────────────────────────────────────────
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
+    console.log(`🚀 Using Airtable base: ${process.env.AIRTABLE_BASE_ID}`);
+});
 
 export default app;
