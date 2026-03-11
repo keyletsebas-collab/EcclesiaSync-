@@ -43,12 +43,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signup = async (email, password, isMaster = false) => {
+    const signup = async (email, password, isMaster = false, accountId = null) => {
         try {
             const response = await fetch(`${API_URL}/api/auth/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email, password, isMaster })
+                body: JSON.stringify({ username: email, password, isMaster, accountId })
             });
             const data = await response.json();
             if (data.success) {

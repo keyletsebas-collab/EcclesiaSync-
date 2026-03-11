@@ -19,13 +19,20 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
 // Signup
 app.post('/api/auth/signup', async (req, res) => {
-    const { username, password, isMaster = false } = req.body;
+    const { username: rawUsername, password, isMaster = false, accountId: joinedAccountId } = req.body;
+    const username = rawUsername?.toLowerCase().trim();
+
     try {
         const users = await storage.getUsers();
-        if (users.find(u => u.username === username)) {
+        if (users.find(u => u.username?.toLowerCase() === username)) {
             return res.status(400).json({ success: false, error: 'Username already exists' });
         }
-        const accountId = uuidv4().substring(0, 8).toUpperCase();
+
+        // Use joinedAccountId if provided, otherwise generate a new one
+        const accountId = joinedAccountId 
+            ? joinedAccountId.trim().toUpperCase() 
+            : uuidv4().substring(0, 8).toUpperCase();
+            
         const uid = uuidv4();
         const createdAt = new Date().toISOString();
 
@@ -41,12 +48,18 @@ app.post('/api/auth/signup', async (req, res) => {
 
 // Login
 app.post('/api/auth/login', async (req, res) => {
-    const { username, password } = req.body;
+    const { username: rawUsername, password } = req.body;
+    const username = rawUsername?.toLowerCase().trim();
+    
     console.log(`🔑 Login attempt for: ${username}`);
     try {
         const users = await storage.getUsers();
         console.log(`👥 Total users found in Airtable: ${users.length}`);
-        const user = users.find(u => u.username === username && u.password === password);
+        
+        const user = users.find(u => 
+            u.username?.toLowerCase() === username && 
+            u.password === password
+        );
 
         if (!user) {
             console.log(`❌ Login failed: User not found or password mismatch`);

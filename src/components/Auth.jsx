@@ -10,6 +10,7 @@ const Auth = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [accountId, setAccountId] = useState(''); // NEW: for joining existing account
     const [isMaster, setIsMaster] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
@@ -43,7 +44,7 @@ const Auth = () => {
 
         const result = isLogin
             ? await login(username, password)
-            : await signup(username, password, isMaster);
+            : await signup(username, password, isMaster, accountId);
 
         if (!result.success) {
             const msg = result.error === 'Account is blocked'
@@ -61,6 +62,7 @@ const Auth = () => {
         setError('');
         setSuccessMessage('');
         setIsMaster(false);
+        setAccountId('');
     };
 
     return (
@@ -118,6 +120,24 @@ const Auth = () => {
                             onChange={(e) => setPassword(e.target.value)}
                         />
                     </div>
+
+                    {!isLogin && (
+                        <div style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                                {t('accountId')} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t('optional')})</span>
+                            </label>
+                            <input
+                                className="glass-input"
+                                value={accountId}
+                                onChange={(e) => setAccountId(e.target.value)}
+                                placeholder="E.g. 044EDFD5"
+                                style={{ textTransform: 'uppercase' }}
+                            />
+                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                                Para unirte a una cuenta existente, introduce su ID.
+                            </p>
+                        </div>
+                    )}
 
                     {!isLogin && (
                         <div style={{
