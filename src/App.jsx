@@ -83,6 +83,11 @@ function App() {
 
   return (
     <div className="app-container">
+      <div className="blob-container">
+        <div className="blob"></div>
+        <div className="blob"></div>
+        <div className="blob"></div>
+      </div>
       {/* Version Indicator */}
       <div style={{
         position: 'fixed',

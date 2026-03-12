@@ -2,12 +2,13 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import Modal from './Modal';
-import { Shield, Trash2, Users, Crown, UserX } from 'lucide-react';
+import { Shield, Trash2, Users, Crown, UserX, Eye, EyeOff, Key } from 'lucide-react';
 
 const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) => {
     const { currentUser } = useAuth();
     const { t } = useLanguage();
     const [userToDelete, setUserToDelete] = useState(null);
+    const [visiblePasswords, setVisiblePasswords] = useState({}); // uid -> boolean
 
     const handleToggleMaster = async (uid) => {
         const user = allUsers.find(u => u.uid === uid);
@@ -20,6 +21,13 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
         if (window.confirm(`¿Estás seguro de eliminar la cuenta de ${username}? Esta acción no se puede deshacer.`)) {
             await onDeleteUser(uid);
         }
+    };
+
+    const togglePasswordVisibility = (uid) => {
+        setVisiblePasswords(prev => ({
+            ...prev,
+            [uid]: !prev[uid]
+        }));
     };
 
     return (
@@ -84,8 +92,24 @@ const AdminPanel = ({ isOpen, onClose, allUsers, onUpdateUser, onDeleteUser }) =
                                             </span>
                                         )}
                                     </div>
-                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                        <div>ID: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{user.accountId}</span></div>
+                                    <div style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <span>ID: </span>
+                                            <span style={{ fontFamily: 'monospace', color: 'var(--primary)', fontWeight: 600 }}>{user.accountId}</span>
+                                        </div>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Key size={12} />
+                                            <span>Clave: </span>
+                                            <span style={{ fontFamily: 'monospace', color: 'var(--accent)', fontWeight: 600, letterSpacing: '0.1em' }}>
+                                                {visiblePasswords[user.uid] ? user.password : '••••••••'}
+                                            </span>
+                                            <button 
+                                                onClick={() => togglePasswordVisibility(user.uid)}
+                                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer', padding: '0.25rem', display: 'flex' }}
+                                            >
+                                                {visiblePasswords[user.uid] ? <EyeOff size={14} /> : <Eye size={14} />}
+                                            </button>
+                                        </div>
                                         <div>Creado: {new Date(user.createdAt).toLocaleDateString()}</div>
                                     </div>
                                 </div>
