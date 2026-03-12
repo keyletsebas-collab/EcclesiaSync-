@@ -45,6 +45,17 @@ export const AuthProvider = ({ children }) => {
         }
     }, [activeAccountId]);
 
+    // Validation: Ensure activeAccountId is always one of the user's memberships
+    useEffect(() => {
+        if (currentUser && activeAccountId) {
+            const isMember = currentUser.memberships?.some(m => m.id === activeAccountId);
+            if (!isMember && currentUser.accountId) {
+                console.log('🔄 Resetting activeAccountId to primary account');
+                setActiveAccountId(currentUser.accountId);
+            }
+        }
+    }, [currentUser, activeAccountId]);
+
     const fetchUsers = async () => {
         if (!currentUser?.isMaster) return;
         try {
@@ -168,6 +179,7 @@ export const AuthProvider = ({ children }) => {
             if (data.success) {
                 const updatedUser = { ...currentUser, memberships: data.memberships };
                 setCurrentUser(updatedUser);
+                setActiveAccountId(accountId); // Auto-switch to joined account
                 return { success: true };
             }
             return { success: false, error: data.error };

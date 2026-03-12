@@ -207,6 +207,7 @@ app.post('/api/auth/accounts/role', async (req, res) => {
 // Get all templates (for an account)
 app.get('/api/templates', async (req, res) => {
     const { accountId } = req.query;
+    console.log(`📂 Fetching templates for account: ${accountId}`);
     try {
         const templates = await storage.getTemplates(accountId);
         res.json(templates);

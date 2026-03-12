@@ -58,7 +58,7 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
         setJoinLoading(false);
         if (res.success) {
             setJoinId('');
-            alert('¡Unido con éxito!');
+            onClose(); // Close settings to see the new account
         } else {
             setJoinError(res.error);
         }

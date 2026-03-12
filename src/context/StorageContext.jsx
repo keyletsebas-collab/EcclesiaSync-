@@ -31,11 +31,14 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 tRes.json(), mRes.json(), sRes.json()
             ]);
 
-            if (Array.isArray(tData)) setTemplates(tData);
+            if (Array.isArray(tData)) {
+                console.log(`📊 Loaded ${tData.length} templates for account ${accountId}`);
+                setTemplates(tData);
+            }
             if (Array.isArray(mData)) setMembers(mData);
             if (Array.isArray(sData)) setServices(sData);
         } catch (err) {
-            console.error('Failed to fetch data:', err);
+            console.error('🔴 Fetch error in StorageContext:', err);
         } finally {
             setLoading(false);
         }
