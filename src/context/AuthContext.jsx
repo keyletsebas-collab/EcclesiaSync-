@@ -2,7 +2,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-const API_URL = import.meta.env.PROD ? 'https://ecclesiasync.vercel.app' : '';
+const API_URL = '';
 
 export const useAuth = () => {
     return useContext(AuthContext);

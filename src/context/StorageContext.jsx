@@ -3,7 +3,7 @@ import { useAuth } from './AuthContext';
 
 const StorageContext = createContext();
 
-const API_URL = import.meta.env.PROD ? 'https://ecclesiasync.vercel.app' : '';
+const API_URL = '';
 
 export const useStorage = () => {
     return useContext(StorageContext);
