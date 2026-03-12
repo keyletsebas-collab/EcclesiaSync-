@@ -196,11 +196,19 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const canEdit = () => {
+        if (!currentUser) return false;
+        if (currentUser.isMaster) return true;
+        const membership = currentUser.memberships?.find(m => m.id === activeAccountId);
+        return membership?.role === 'master';
+    };
+
     const value = {
         currentUser,
         activeAccountId,
         setActiveAccountId,
         isAuthenticated: !!currentUser,
+        canEdit: canEdit(),
         loading,
         users,
         signup,

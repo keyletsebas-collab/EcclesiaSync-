@@ -7,7 +7,7 @@ import AssignServiceModal from './AssignServiceModal';
 
 const ServicesView = ({ templateId, members }) => {
     const { services, addService, deleteService } = useStorage();
-    const { currentUser } = useAuth();
+    const { currentUser, canEdit } = useAuth();
     const { t } = useLanguage();
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
 
@@ -52,7 +52,7 @@ const ServicesView = ({ templateId, members }) => {
                     </p>
                 </div>
 
-                {currentUser.isMaster && (
+                {canEdit && (
                     <button
                         className="btn btn-primary"
                         onClick={() => setIsAssignModalOpen(true)}
@@ -108,7 +108,7 @@ const ServicesView = ({ templateId, members }) => {
                                     </div>
                                 </div>
 
-                                {currentUser.isMaster ? (
+                                {canEdit ? (
                                     <button
                                         className="btn-danger"
                                         style={{ padding: '0.5rem', borderRadius: '6px' }}
@@ -117,20 +117,9 @@ const ServicesView = ({ templateId, members }) => {
                                         <Trash2 size={16} />
                                     </button>
                                 ) : (
-                                    <button
-                                        disabled
-                                        title={t('onlyMasterCanDelete')}
-                                        style={{
-                                            padding: '0.5rem',
-                                            borderRadius: '6px',
-                                            background: 'rgba(100, 100, 100, 0.2)',
-                                            border: '1px solid var(--border)',
-                                            cursor: 'not-allowed',
-                                            opacity: 0.5
-                                        }}
-                                    >
-                                        <ShieldAlert size={16} color="var(--text-muted)" />
-                                    </button>
+                                    <span style={{ color: 'var(--text-muted)' }}>
+                                        <ShieldAlert size={16} style={{ opacity: 0.5 }} />
+                                    </span>
                                 )}
                             </div>
                         ))}

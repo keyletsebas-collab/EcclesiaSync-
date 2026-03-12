@@ -6,7 +6,7 @@
             "destination": "/api/index.js"
         },
         {
-            "source": "/(.*)",
+            "source": "/((?!assets/|api/|sw.js|manifest.json).* )",
             "destination": "/index.html"
         }
     ]

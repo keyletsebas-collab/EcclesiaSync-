@@ -2,14 +2,22 @@ import React, { useState } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles } from 'lucide-react';
+import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check } from 'lucide-react';
 import Settings from './Settings';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstallApp, canInstall }) => {
     const { templates } = useStorage();
-    const { currentUser, activeAccountId, setActiveAccountId } = useAuth();
+    const { currentUser, activeAccountId, setActiveAccountId, canEdit } = useAuth();
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+    const [isIdCopied, setIsIdCopied] = useState(false);
+
+    const handleCopyId = () => {
+        if (!activeAccountId) return;
+        navigator.clipboard.writeText(activeAccountId);
+        setIsIdCopied(true);
+        setTimeout(() => setIsIdCopied(false), 2000);
+    };
 
     return (
         <>
@@ -43,32 +51,49 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                     <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
                         {t('currentAccount')}
                     </label>
-                    <select 
-                        value={activeAccountId} 
-                        onChange={(e) => setActiveAccountId(e.target.value)}
-                        className="glass-input"
-                        style={{ fontSize: '0.8rem', padding: '0.5rem', background: 'var(--bg-glass)' }}
-                    >
-                        {currentUser?.memberships?.map(m => (
-                            <option key={m.id} value={m.id}>{m.id} ({m.role})</option>
-                        ))}
-                    </select>
+                    <div style={{ position: 'relative', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                        <select 
+                            value={activeAccountId} 
+                            onChange={(e) => setActiveAccountId(e.target.value)}
+                            className="glass-input"
+                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem', background: 'var(--bg-glass)' }}
+                        >
+                            {currentUser?.memberships?.map(m => (
+                                <option key={m.id} value={m.id}>{m.id} ({m.role})</option>
+                            ))}
+                        </select>
+                        <button 
+                            onClick={handleCopyId}
+                            className="btn"
+                            title={t('copyId') || 'Copiar ID'}
+                            style={{ 
+                                padding: '0.5rem', 
+                                background: 'var(--bg-glass)', 
+                                border: '1px solid var(--border)',
+                                color: isIdCopied ? 'var(--primary)' : 'var(--text-muted)'
+                            }}
+                        >
+                            {isIdCopied ? <Check size={14} /> : <Copy size={14} />}
+                        </button>
+                    </div>
                 </div>
 
-                <button
-                    onClick={onOpenNewTemplate}
-                    className="btn btn-primary"
-                    style={{
-                        width: '100%',
-                        justifyContent: 'center',
-                        marginBottom: '2rem',
-                        fontSize: '0.875rem',
-                        padding: '0.875rem'
-                    }}
-                >
-                    <FolderPlus size={18} />
-                    {t('newTemplate')}
-                </button>
+                {canEdit && (
+                    <button
+                        onClick={onOpenNewTemplate}
+                        className="btn btn-primary"
+                        style={{
+                            width: '100%',
+                            justifyContent: 'center',
+                            marginBottom: '2rem',
+                            fontSize: '0.875rem',
+                            padding: '0.875rem'
+                        }}
+                    >
+                        <FolderPlus size={18} />
+                        {t('newTemplate')}
+                    </button>
+                )}
 
                 <div style={{ flex: 1, overflowY: 'auto', margin: '0 -0.5rem', padding: '0 0.5rem' }}>
                     <h3 style={{

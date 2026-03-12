@@ -149,7 +149,7 @@ const LandingPage = ({ onEnter }) => {
                         description={t('featureCloudDesc')}
                     />
                     <FeatureCard
-                        icon={<BookOpen size={24} />}
+                        icon={<Sparkles size={24} />}
                         title={t('featureTemplatesTitle')}
                         description={t('featureTemplatesDesc')}
                     />

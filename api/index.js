@@ -221,8 +221,8 @@ app.post('/api/templates', async (req, res) => {
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, accountId, 'editor')) {
-            return res.status(403).json({ error: 'Insufficient permissions to create templates' });
+        if (!checkPermission(user, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can create templates' });
         }
 
         const id = uuidv4();
@@ -247,8 +247,8 @@ app.put('/api/templates/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, template.accountId, 'editor')) {
-            return res.status(403).json({ error: 'Insufficient permissions' });
+        if (!checkPermission(user, template.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can update templates' });
         }
 
         await storage.updateTemplate(id, req.body);
@@ -299,8 +299,8 @@ app.post('/api/members', async (req, res) => {
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, accountId, 'editor')) {
-            return res.status(403).json({ error: 'Insufficient permissions' });
+        if (!checkPermission(user, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can add members' });
         }
 
         const id = uuidv4();
@@ -324,8 +324,8 @@ app.put('/api/members/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, member.accountId, 'editor')) {
-            return res.status(403).json({ error: 'Insufficient permissions' });
+        if (!checkPermission(user, member.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can update members' });
         }
 
         await storage.updateMember(id, req.body);
@@ -337,8 +337,20 @@ app.put('/api/members/:id', async (req, res) => {
 
 // Delete member
 app.delete('/api/members/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.query;
     try {
-        await storage.deleteMember(req.params.id);
+        const members = await storage.getMembers();
+        const member = members.find(m => m.id === id);
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, member.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can delete members' });
+        }
+
+        await storage.deleteMember(id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -360,10 +372,16 @@ app.get('/api/services', async (req, res) => {
 
 // Create service
 app.post('/api/services', async (req, res) => {
-    const { templateId, memberId, accountId, memberName, serviceDate, serviceType = '' } = req.body;
-    const id = uuidv4();
-    const createdAt = new Date().toISOString();
+    const { templateId, memberId, accountId, memberName, serviceDate, serviceType = '', uid } = req.body;
     try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can assign services' });
+        }
+
+        const id = uuidv4();
+        const createdAt = new Date().toISOString();
         const newService = { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt };
         await storage.addService(newService);
         res.json(newService);
@@ -374,8 +392,20 @@ app.post('/api/services', async (req, res) => {
 
 // Update service
 app.put('/api/services/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.body;
     try {
-        await storage.updateService(req.params.id, req.body);
+        const services = await storage.getServices();
+        const service = services.find(s => s.id === id);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, service.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can update services' });
+        }
+
+        await storage.updateService(id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -393,8 +423,8 @@ app.delete('/api/services/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, service.accountId, 'editor')) {
-            return res.status(403).json({ error: 'Insufficient permissions' });
+        if (!checkPermission(user, service.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can delete services' });
         }
 
         await storage.deleteService(id);

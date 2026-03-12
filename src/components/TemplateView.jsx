@@ -3,13 +3,13 @@ import { useStorage } from '../context/StorageContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { generateTemplatePDF } from '../utils/pdfGenerator';
-import { Trash2, Edit2, UserPlus, Download, Search, ShieldAlert, Crown, Calendar, Save } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Download, Search, ShieldAlert, Crown, Calendar, Save, Copy, Check } from 'lucide-react';
 import Modal from './Modal';
 import ServicesView from './ServicesView';
 
 const TemplateView = ({ templateId }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate } = useStorage();
-    const { currentUser } = useAuth();
+    const { currentUser, canEdit } = useAuth();
     const { t } = useLanguage();
 
     const template = templates.find(t => t.id === templateId);
@@ -20,6 +20,7 @@ const TemplateView = ({ templateId }) => {
     const [isEditingTemplate, setIsEditingTemplate] = useState(false);
     const [editTemplateName, setEditTemplateName] = useState('');
     const [activeTab, setActiveTab] = useState('members'); // 'members' or 'services'
+    const [copiedId, setCopiedId] = useState(null);
 
     // Member Form State
     const [newMember, setNewMember] = useState({
@@ -46,6 +47,12 @@ const TemplateView = ({ templateId }) => {
             await updateTemplate(templateId, { name: editTemplateName });
             setIsEditingTemplate(false);
         }
+    };
+
+    const copyToClipboard = (text) => {
+        navigator.clipboard.writeText(text);
+        setCopiedId(text);
+        setTimeout(() => setCopiedId(null), 2000);
     };
 
     const filteredMembers = templateMembers.filter(m =>
@@ -83,12 +90,14 @@ const TemplateView = ({ templateId }) => {
                     ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <h1 style={{ margin: 0, fontSize: '2rem' }}>{template.name}</h1>
-                            <button
-                                onClick={() => { setEditTemplateName(template.name); setIsEditingTemplate(true); }}
-                                style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
-                            >
-                                <Edit2 size={16} />
-                            </button>
+                            {canEdit && (
+                                <button
+                                    onClick={() => { setEditTemplateName(template.name); setIsEditingTemplate(true); }}
+                                    style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
+                                >
+                                    <Edit2 size={16} />
+                                </button>
+                            )}
                         </div>
                     )}
                     <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>
@@ -104,13 +113,15 @@ const TemplateView = ({ templateId }) => {
                     >
                         <Download size={18} /> {t('exportPDF')}
                     </button>
-                    <button
-                        className="btn btn-primary"
-                        onClick={() => setIsAddMemberOpen(true)}
-                    >
-                        <UserPlus size={18} /> {t('addMember')}
-                    </button>
-                    {currentUser.isMaster ? (
+                    {canEdit && (
+                        <button
+                            className="btn btn-primary"
+                            onClick={() => setIsAddMemberOpen(true)}
+                        >
+                            <UserPlus size={18} /> {t('addMember')}
+                        </button>
+                    )}
+                    {canEdit ? (
                         <button
                             className="btn btn-danger"
                             onClick={async () => {
@@ -122,19 +133,11 @@ const TemplateView = ({ templateId }) => {
                             <Trash2 size={18} />
                         </button>
                     ) : (
-                        <button
-                            className="btn"
-                            disabled
-                            title={t('onlyMasterCanDelete')}
-                            style={{
-                                background: 'rgba(100, 100, 100, 0.2)',
-                                cursor: 'not-allowed',
-                                opacity: 0.5,
-                                border: '1px solid var(--border)'
-                            }}
-                        >
-                            <ShieldAlert size={18} />
-                        </button>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                <ShieldAlert size={14} /> {t('readOnly') || 'Vista de solo lectura'}
+                            </span>
+                        </div>
                     )}
                 </div>
             </header>
@@ -243,15 +246,30 @@ const TemplateView = ({ templateId }) => {
                                             </div>
                                         </td>
                                         <td>
-                                            <span style={{
-                                                fontFamily: 'monospace',
-                                                fontSize: '0.85rem',
-                                                color: 'var(--primary)',
-                                                fontWeight: 600,
-                                                letterSpacing: '0.05em'
-                                            }}>
+                                            <div 
+                                                onClick={() => member.accountId && copyToClipboard(member.accountId)}
+                                                title={t('clickToCopy') || 'Click para copiar'}
+                                                style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    gap: '0.4rem',
+                                                    cursor: member.accountId ? 'pointer' : 'default',
+                                                    fontFamily: 'monospace',
+                                                    fontSize: '0.85rem',
+                                                    color: 'var(--primary)',
+                                                    fontWeight: 600,
+                                                    letterSpacing: '0.05em',
+                                                    padding: '0.2rem 0.4rem',
+                                                    borderRadius: '4px',
+                                                    background: copiedId === member.accountId ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                                                    transition: 'all 0.2s'
+                                                }}
+                                            >
                                                 {member.accountId || '-'}
-                                            </span>
+                                                {member.accountId && (
+                                                    copiedId === member.accountId ? <Check size={12} color="var(--primary)" /> : <Copy size={12} style={{ opacity: 0.5 }} />
+                                                )}
+                                            </div>
                                         </td>
                                         <td>{member.number}</td>
                                         <td>{member.phone}</td>
@@ -259,7 +277,7 @@ const TemplateView = ({ templateId }) => {
                                             <td key={field}>{member.identifications[field] || '-'}</td>
                                         ))}
                                         <td style={{ textAlign: 'right' }}>
-                                            {currentUser.isMaster ? (
+                                            {canEdit ? (
                                                 <button
                                                     className="btn-danger"
                                                     style={{ padding: '0.4rem', borderRadius: '6px' }}
@@ -268,20 +286,9 @@ const TemplateView = ({ templateId }) => {
                                                     <Trash2 size={14} />
                                                 </button>
                                             ) : (
-                                                <button
-                                                    disabled
-                                                    title={t('onlyMasterCanDelete')}
-                                                    style={{
-                                                        padding: '0.4rem',
-                                                        borderRadius: '6px',
-                                                        background: 'rgba(100, 100, 100, 0.2)',
-                                                        border: '1px solid var(--border)',
-                                                        cursor: 'not-allowed',
-                                                        opacity: 0.5
-                                                    }}
-                                                >
-                                                    <ShieldAlert size={14} color="var(--text-muted)" />
-                                                </button>
+                                                <span style={{ color: 'var(--text-muted)' }}>
+                                                    <ShieldAlert size={14} style={{ opacity: 0.5 }} />
+                                                </span>
                                             )}
                                         </td>
                                     </tr>
