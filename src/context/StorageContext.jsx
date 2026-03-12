@@ -8,7 +8,9 @@ export const useStorage = () => {
     return useContext(StorageContext);
 };
 
-export const StorageProvider = ({ children, accountId }) => {
+export const StorageProvider = ({ children, accountId: propAccountId }) => {
+    const { currentUser, activeAccountId } = useAuth();
+    const accountId = activeAccountId || propAccountId;
     const [templates, setTemplates] = useState([]);
     const [members, setMembers] = useState([]);
     const [services, setServices] = useState([]);
@@ -49,7 +51,7 @@ export const StorageProvider = ({ children, accountId }) => {
             const res = await fetch(`${API_URL}/api/templates`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ accountId, name, customFields })
+                body: JSON.stringify({ accountId, name, customFields, uid: currentUser?.uid })
             });
 
             if (!res.ok) {
@@ -69,7 +71,7 @@ export const StorageProvider = ({ children, accountId }) => {
             await fetch(`${API_URL}/api/templates/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
+                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
             });
             await fetchData();
         } catch (err) {
@@ -79,7 +81,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteTemplate = async (id) => {
         try {
-            await fetch(`${API_URL}/api/templates/${id}`, { method: 'DELETE' });
+            await fetch(`${API_URL}/api/templates/${id}?uid=${currentUser?.uid}`, { method: 'DELETE' });
             await fetchData();
         } catch (err) {
             console.error('Failed to delete template:', err);
@@ -93,7 +95,7 @@ export const StorageProvider = ({ children, accountId }) => {
             await fetch(`${API_URL}/api/members`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ templateId, accountId, ...memberData })
+                body: JSON.stringify({ templateId, accountId, ...memberData, uid: currentUser?.uid })
             });
             await fetchData();
         } catch (err) {
@@ -106,7 +108,7 @@ export const StorageProvider = ({ children, accountId }) => {
             await fetch(`${API_URL}/api/members/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
+                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
             });
             await fetchData();
         } catch (err) {
@@ -116,7 +118,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteMember = async (id) => {
         try {
-            await fetch(`${API_URL}/api/members/${id}`, { method: 'DELETE' });
+            await fetch(`${API_URL}/api/members/${id}?uid=${currentUser?.uid}`, { method: 'DELETE' });
             await fetchData();
         } catch (err) {
             console.error('Failed to delete member:', err);
@@ -130,7 +132,7 @@ export const StorageProvider = ({ children, accountId }) => {
             await fetch(`${API_URL}/api/services`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ templateId, memberId, accountId, memberName, serviceDate, serviceType })
+                body: JSON.stringify({ templateId, memberId, accountId, memberName, serviceDate, serviceType, uid: currentUser?.uid })
             });
             await fetchData();
         } catch (err) {
@@ -143,7 +145,7 @@ export const StorageProvider = ({ children, accountId }) => {
             await fetch(`${API_URL}/api/services/${id}`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(updatedData)
+                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
             });
             await fetchData();
         } catch (err) {
@@ -153,7 +155,7 @@ export const StorageProvider = ({ children, accountId }) => {
 
     const deleteService = async (id) => {
         try {
-            await fetch(`${API_URL}/api/services/${id}`, { method: 'DELETE' });
+            await fetch(`${API_URL}/api/services/${id}?uid=${currentUser?.uid}`, { method: 'DELETE' });
             await fetchData();
         } catch (err) {
             console.error('Failed to delete service:', err);

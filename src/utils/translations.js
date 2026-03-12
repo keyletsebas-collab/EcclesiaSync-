@@ -21,6 +21,10 @@ export const translations = {
         yourTemplates: 'Your Templates',
         noTemplatesYet: 'No templates yet. Create one to get started.',
         settings: 'Settings',
+        currentAccount: 'Current Organization',
+        switchAccount: 'Switch Organization',
+        joinNewAccount: 'Join New Organization',
+        manageMembers: 'Manage Team',
 
         // Welcome
         welcomeTitle: 'Welcome to EcclesiaSync',
@@ -67,6 +71,10 @@ export const translations = {
         accountIdLabel: 'Your Account ID',
         masterAccount: 'Master Account',
         regularAccount: 'Regular Account',
+        role: 'Role',
+        expiresAt: 'Expires at',
+        delegateAccess: 'Delegate Master Access',
+        temporaryMaster: 'Temporary Master',
 
         // Permissions
         onlyMasterCanDelete: 'Only master users can delete',
@@ -149,6 +157,10 @@ export const translations = {
         yourTemplates: 'Tus Plantillas',
         noTemplatesYet: 'No hay plantillas aún. Crea una para comenzar.',
         settings: 'Ajustes',
+        currentAccount: 'Organización Actual',
+        switchAccount: 'Cambiar Organización',
+        joinNewAccount: 'Unirse a Nueva Organización',
+        manageMembers: 'Gestionar Equipo',
 
         // Welcome
         welcomeTitle: 'Bienvenido a EcclesiaSync',
@@ -192,6 +204,10 @@ export const translations = {
         accountIdLabel: 'Tu ID de Cuenta',
         masterAccount: 'Cuenta Master',
         regularAccount: 'Cuenta Regular',
+        role: 'Rol',
+        expiresAt: 'Expira el',
+        delegateAccess: 'Delegar Acceso Master',
+        temporaryMaster: 'Master Temporal',
 
         // Permissions
         onlyMasterCanDelete: 'Solo usuarios master pueden eliminar',

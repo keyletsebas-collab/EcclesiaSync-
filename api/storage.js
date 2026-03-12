@@ -52,6 +52,13 @@ function toObj(record) {
             fields.identifications = {};
         }
 
+        // Parse memberships (should be an array of {id, role, expiresAt})
+        if (typeof fields.memberships === 'string') {
+            try { fields.memberships = JSON.parse(fields.memberships); } catch (e) { fields.memberships = []; }
+        } else if (!Array.isArray(fields.memberships)) {
+            fields.memberships = [];
+        }
+
         // Ensure common fields have defaults to prevent UI rendering issues
         fields.name = fields.name ?? '';
         fields.phone = fields.phone ?? '';
@@ -107,9 +114,14 @@ export const storage = {
     getUsers: () => getAll('Users'),
 
     addUser: async (user) => {
-        const { uid, username, password, isMaster, accountId, createdAt } = user;
+        const { uid, username, password, isMaster, accountId, createdAt, memberships } = user;
         await base('Users').create([{
-            fields: { uid, username, password, isMaster: !!isMaster, accountId, createdAt, isBlocked: false }
+            fields: { 
+                uid, username, password, 
+                isMaster: !!isMaster, accountId, createdAt, 
+                isBlocked: false,
+                memberships: jsonStr(memberships || [])
+            }
         }]);
         return user;
     },
@@ -118,7 +130,11 @@ export const storage = {
         // Buscar el record ID de Airtable primero
         const records = await getAll('Users', `{uid} = '${uid}'`);
         if (!records.length) return;
-        await base('Users').update(records[0]._recId, updates);
+        
+        const fields = { ...updates };
+        if (fields.memberships) fields.memberships = jsonStr(fields.memberships);
+        
+        await base('Users').update(records[0]._recId, fields);
     },
 
     deleteUser: async (uid) => {

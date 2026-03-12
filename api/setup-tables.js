@@ -58,6 +58,10 @@ async function createField(tableId, tableName, field) {
     }
 }
 
+const USERS_FIELDS = [
+    { name: 'memberships', type: 'multilineText' },
+];
+
 const MEMBERS_FIELDS = [
     { name: 'id', type: 'singleLineText' },
     { name: 'templateId', type: 'singleLineText' },
@@ -86,6 +90,12 @@ async function setup() {
     const tables = await getTableIds();
     const membersTable = tables.find(t => t.name === 'Members');
     const servicesTable = tables.find(t => t.name === 'Services');
+    const usersTable = tables.find(t => t.name === 'Users');
+
+    if (!usersTable) {
+        console.error('❌ Table "Users" not found in base.');
+        process.exit(1);
+    }
 
     if (!membersTable) {
         console.error('❌ Table "Members" not found in base. Create it manually in Airtable first.');
@@ -94,6 +104,11 @@ async function setup() {
     if (!servicesTable) {
         console.error('❌ Table "Services" not found in base. Create it manually in Airtable first.');
         process.exit(1);
+    }
+
+    console.log('📋 Adding fields to Users table...');
+    for (const field of USERS_FIELDS) {
+        await createField(usersTable.id, 'Users', field);
     }
 
     console.log('📋 Adding fields to Members table...');

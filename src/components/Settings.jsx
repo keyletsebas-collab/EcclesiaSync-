@@ -9,9 +9,15 @@ import {
 } from 'lucide-react';
 
 const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
-    const { currentUser, logout, users, fetchUsers, toggleBlockUser, deleteUser } = useAuth();
+    const { 
+        currentUser, logout, users, fetchUsers, 
+        toggleBlockUser, deleteUser, joinAccount, updateMembershipRole 
+    } = useAuth();
     const { currentLanguage, setLanguage, t } = useLanguage();
     const { theme, setTheme } = useTheme();
+    const [joinId, setJoinId] = useState('');
+    const [joinLoading, setJoinLoading] = useState(false);
+    const [joinError, setJoinError] = useState('');
     const [visiblePasswords, setVisiblePasswords] = useState({});
     const [loadingAction, setLoadingAction] = useState(null);
 
@@ -40,6 +46,30 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
         if (!window.confirm('¿Estás seguro de eliminar este usuario?')) return;
         setLoadingAction(uid + '_delete');
         await deleteUser(uid);
+        setLoadingAction(null);
+    };
+
+    const handleJoin = async (e) => {
+        e.preventDefault();
+        if (!joinId.trim()) return;
+        setJoinLoading(true);
+        setJoinError('');
+        const res = await joinAccount(joinId.trim().toUpperCase());
+        setJoinLoading(false);
+        if (res.success) {
+            setJoinId('');
+            alert('¡Unido con éxito!');
+        } else {
+            setJoinError(res.error);
+        }
+    };
+
+    const handlePromote = async (targetUid, currentRole) => {
+        const newRole = currentRole === 'master' ? 'editor' : 'master';
+        const expiresAt = newRole === 'master' ? new Date(Date.now() + 3600000 * 24).toISOString() : null; // 24h for temp master
+        setLoadingAction(targetUid + '_promote');
+        await updateMembershipRole(targetUid, currentUser.accountId, newRole, expiresAt);
+        await fetchUsers();
         setLoadingAction(null);
     };
 
@@ -101,22 +131,35 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
                             {currentUser?.isMaster ? t('masterAccount') : t('regularAccount')}
                         </span>
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>{t('accountId')}</span>
-                        <code style={{ fontSize: '0.75rem', color: 'var(--primary)', background: 'rgba(99,102,241,0.1)', padding: '0.1rem 0.4rem', borderRadius: '4px' }}>
-                            {currentUser?.accountId}
-                        </code>
-                    </div>
                 </div>
+
+                {/* Join New Account */}
+                <form onSubmit={handleJoin} style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>{t('joinNewAccount')}</label>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <input 
+                            type="text" 
+                            className="glass-input" 
+                            placeholder="CODE-123" 
+                            value={joinId}
+                            onChange={(e) => setJoinId(e.target.value)}
+                            style={{ flex: 1, fontSize: '0.875rem' }}
+                        />
+                        <button type="submit" disabled={joinLoading} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
+                            {joinLoading ? '...' : '+'}
+                        </button>
+                    </div>
+                    {joinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>{joinError}</p>}
+                </form>
             </div>
 
-            {/* ─── MASTER: User Management ────────────────────────────── */}
-            {currentUser?.isMaster && (
+            {/* ─── TEAM: Organization Management ────────────────────────────── */}
+            {(currentUser?.isMaster || currentUser?.memberships?.find(m => m.id === currentUser.accountId && m.role === 'master')) && (
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
                             <Users size={16} />
-                            Gestión de Usuarios
+                            {t('manageMembers')}
                         </h4>
                         <button
                             onClick={() => fetchUsers()}
@@ -127,99 +170,42 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
                         </button>
                     </div>
 
-                    {otherUsers.length === 0 ? (
+                    {otherUsers.filter(u => u.accountId === currentUser.accountId).length === 0 ? (
                         <div style={{ textAlign: 'center', padding: '1.5rem', color: 'var(--text-muted)', fontSize: '0.8rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                            No hay otros usuarios registrados
+                            No hay otros miembros en este equipo
                         </div>
                     ) : (
                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                            {otherUsers.map(user => (
-                                <div key={user.uid} style={{
-                                    padding: '0.875rem 1rem',
-                                    background: user.isBlocked
-                                        ? 'rgba(239,68,68,0.06)'
-                                        : 'var(--bg-glass)',
-                                    borderRadius: 'var(--radius)',
-                                    border: user.isBlocked
-                                        ? '1px solid rgba(239,68,68,0.3)'
-                                        : '1px solid var(--border)',
-                                    transition: 'all 0.2s'
-                                }}>
-                                    {/* Top row: username + badges */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                            {otherUsers.filter(u => u.accountId === currentUser.accountId).map(user => {
+                                const m = user.memberships?.find(m => m.id === currentUser.accountId);
+                                return (
+                                    <div key={user.uid} style={{
+                                        padding: '0.875rem 1rem',
+                                        background: user.isBlocked ? 'rgba(239,68,68,0.06)' : 'var(--bg-glass)',
+                                        borderRadius: 'var(--radius)',
+                                        border: user.isBlocked ? '1px solid rgba(239,68,68,0.3)' : '1px solid var(--border)',
+                                    }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.6rem' }}>
                                             <span style={{ fontWeight: 600, fontSize: '0.875rem' }}>{user.username}</span>
-                                            {user.isMaster && (
-                                                <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.45rem', background: 'rgba(99,102,241,0.2)', color: 'var(--primary)', borderRadius: '1rem', border: '1px solid var(--primary-glow)', display: 'flex', alignItems: 'center', gap: '0.2rem' }}>
-                                                    <Shield size={9} /> Master
-                                                </span>
-                                            )}
+                                            <span style={{ fontSize: '0.65rem', padding: '0.15rem 0.5rem', borderRadius: '1rem', background: 'rgba(99,102,241,0.1)', color: 'var(--primary)' }}>
+                                                {m?.role || 'editor'}
+                                            </span>
                                         </div>
-                                        {/* Status badge */}
-                                        <span style={{
-                                            fontSize: '0.65rem', padding: '0.15rem 0.5rem', borderRadius: '1rem', fontWeight: 600,
-                                            background: user.isBlocked ? 'rgba(239,68,68,0.15)' : 'rgba(34,197,94,0.15)',
-                                            color: user.isBlocked ? '#ef4444' : '#22c55e',
-                                            border: user.isBlocked ? '1px solid rgba(239,68,68,0.3)' : '1px solid rgba(34,197,94,0.3)'
-                                        }}>
-                                            {user.isBlocked ? '🔒 Bloqueado' : '✓ Activo'}
-                                        </span>
-                                    </div>
-
-                                    {/* Password row */}
-                                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
-                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Contraseña</span>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                                            <code style={{
-                                                fontSize: '0.75rem', fontFamily: 'monospace',
-                                                background: 'var(--input-bg)', padding: '0.15rem 0.5rem',
-                                                borderRadius: '4px', color: 'var(--text-main)', border: '1px solid var(--border)',
-                                                letterSpacing: visiblePasswords[user.uid] ? 'normal' : '0.1em'
-                                            }}>
-                                                {visiblePasswords[user.uid] ? user.password : '••••••••'}
-                                            </code>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
                                             <button
-                                                onClick={() => togglePasswordVisibility(user.uid)}
-                                                style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: '0.1rem', display: 'flex', alignItems: 'center' }}
-                                                title={visiblePasswords[user.uid] ? 'Ocultar' : 'Mostrar'}
+                                                onClick={() => handlePromote(user.uid, m?.role)}
+                                                disabled={loadingAction === user.uid + '_promote'}
+                                                style={{ flex: 1, fontSize: '0.7rem', padding: '0.3rem', borderRadius: '4px', background: 'var(--primary)', color: 'white', border: 'none' }}
                                             >
-                                                {visiblePasswords[user.uid] ? <EyeOff size={13} /> : <Eye size={13} />}
+                                                {m?.role === 'master' ? 'Quitar Master' : 'Hacer Master (24h)'}
+                                            </button>
+                                            <button onClick={() => handleDelete(user.uid)} className="btn-danger" style={{ padding: '0.3rem', borderRadius: '4px' }}>
+                                                <Trash2 size={12} />
                                             </button>
                                         </div>
                                     </div>
-
-                                    {/* Action buttons */}
-                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                        <button
-                                            onClick={() => handleBlock(user.uid, !user.isBlocked)}
-                                            disabled={loadingAction === user.uid + '_block'}
-                                            style={{
-                                                flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem',
-                                                fontSize: '0.75rem', padding: '0.4rem 0.6rem', borderRadius: 'var(--radius)',
-                                                border: 'none', cursor: 'pointer', fontWeight: 600, transition: 'all 0.2s',
-                                                background: user.isBlocked ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.12)',
-                                                color: user.isBlocked ? '#22c55e' : '#ef4444',
-                                                opacity: loadingAction === user.uid + '_block' ? 0.5 : 1
-                                            }}
-                                        >
-                                            {user.isBlocked ? <><Unlock size={12} /> Desbloquear</> : <><Lock size={12} /> Bloquear</>}
-                                        </button>
-                                        <button
-                                            onClick={() => handleDelete(user.uid)}
-                                            disabled={loadingAction === user.uid + '_delete'}
-                                            style={{
-                                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem',
-                                                fontSize: '0.75rem', padding: '0.4rem 0.7rem', borderRadius: 'var(--radius)',
-                                                border: '1px solid rgba(239,68,68,0.3)', cursor: 'pointer', fontWeight: 600,
-                                                background: 'transparent', color: '#ef4444', transition: 'all 0.2s',
-                                                opacity: loadingAction === user.uid + '_delete' ? 0.5 : 1
-                                            }}
-                                        >
-                                            <Trash2 size={12} />
-                                        </button>
-                                    </div>
-                                </div>
-                            ))}
+                                );
+                            })}
                         </div>
                     )}
                 </div>

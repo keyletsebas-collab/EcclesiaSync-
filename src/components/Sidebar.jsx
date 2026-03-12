@@ -6,13 +6,14 @@ import Settings from './Settings';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstallApp, canInstall }) => {
     const { templates } = useStorage();
+    const { currentUser, activeAccountId, setActiveAccountId } = useAuth();
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     return (
         <>
             <aside className="sidebar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '2.5rem', padding: '0 0.5rem' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
                     <div style={{
                         background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
                         padding: '0.5rem',
@@ -24,6 +25,23 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                     <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
                         EcclesiaSync
                     </span>
+                </div>
+
+                {/* Account Switcher */}
+                <div style={{ marginBottom: '2rem' }}>
+                    <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
+                        {t('currentAccount')}
+                    </label>
+                    <select 
+                        value={activeAccountId} 
+                        onChange={(e) => setActiveAccountId(e.target.value)}
+                        className="glass-input"
+                        style={{ fontSize: '0.8rem', padding: '0.5rem', background: 'var(--bg-glass)' }}
+                    >
+                        {currentUser?.memberships?.map(m => (
+                            <option key={m.id} value={m.id}>{m.id} ({m.role})</option>
+                        ))}
+                    </select>
                 </div>
 
                 <button

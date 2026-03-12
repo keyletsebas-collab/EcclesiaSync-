@@ -19,16 +19,31 @@ export const AuthProvider = ({ children }) => {
         }
     });
 
+    const [activeAccountId, setActiveAccountId] = useState(() => {
+        return localStorage.getItem('app_active_account_id') || currentUser?.accountId || null;
+    });
+
     const [users, setUsers] = useState([]);
     const [loading] = useState(false);
 
     useEffect(() => {
         if (currentUser) {
             localStorage.setItem('app_current_user', JSON.stringify(currentUser));
+            if (!activeAccountId && currentUser.accountId) {
+                setActiveAccountId(currentUser.accountId);
+            }
         } else {
             localStorage.removeItem('app_current_user');
+            localStorage.removeItem('app_active_account_id');
+            setActiveAccountId(null);
         }
     }, [currentUser]);
+
+    useEffect(() => {
+        if (activeAccountId) {
+            localStorage.setItem('app_active_account_id', activeAccountId);
+        }
+    }, [activeAccountId]);
 
     const fetchUsers = async () => {
         if (!currentUser?.isMaster) return;
@@ -56,9 +71,11 @@ export const AuthProvider = ({ children }) => {
                     uid: data.uid,
                     username: data.username,
                     isMaster: data.isMaster,
-                    accountId: data.accountId
+                    accountId: data.accountId,
+                    memberships: data.memberships || []
                 };
                 setCurrentUser(user);
+                setActiveAccountId(data.accountId);
                 return { success: true };
             }
             return { success: false, error: data.error };
@@ -82,9 +99,13 @@ export const AuthProvider = ({ children }) => {
                     uid: data.uid,
                     username: data.username,
                     isMaster: data.isMaster,
-                    accountId: data.accountId
+                    accountId: data.accountId,
+                    memberships: data.memberships || []
                 };
                 setCurrentUser(user);
+                // Default to their primary account but prioritize saved active account
+                const savedActive = localStorage.getItem('app_active_account_id');
+                setActiveAccountId(savedActive || data.accountId);
                 return { success: true };
             }
             return { success: false, error: data.error };
@@ -135,14 +156,58 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    const joinAccount = async (accountId) => {
+        if (!currentUser) return { success: false, error: 'Not logged in' };
+        try {
+            const res = await fetch(`${API_URL}/api/auth/accounts/join`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: currentUser.uid, accountId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                const updatedUser = { ...currentUser, memberships: data.memberships };
+                setCurrentUser(updatedUser);
+                return { success: true };
+            }
+            return { success: false, error: data.error };
+        } catch (err) {
+            return { success: false, error: 'Connection error' };
+        }
+    };
+
+    const updateMembershipRole = async (targetUid, accountId, role, expiresAt) => {
+        if (!currentUser) return;
+        try {
+            const res = await fetch(`${API_URL}/api/auth/accounts/role`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                    masterUid: currentUser.uid, 
+                    targetUid, 
+                    accountId, 
+                    role, 
+                    expiresAt 
+                })
+            });
+            return await res.json();
+        } catch (err) {
+            console.error('Failed to update role:', err);
+        }
+    };
+
     const value = {
         currentUser,
+        activeAccountId,
+        setActiveAccountId,
         isAuthenticated: !!currentUser,
         loading,
         users,
         signup,
         login,
         logout,
+        joinAccount,
+        updateMembershipRole,
         updateUserRole,
         toggleBlockUser,
         deleteUser,

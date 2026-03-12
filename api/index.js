@@ -36,10 +36,17 @@ app.post('/api/auth/signup', async (req, res) => {
         const uid = uuidv4();
         const createdAt = new Date().toISOString();
 
-        const newUser = { uid, username, password, isMaster: !!isMaster, accountId, createdAt };
+        // New membership system: role can be master, editor, or viewer
+        const memberships = [{
+            id: accountId,
+            role: !!isMaster ? 'master' : 'editor',
+            expiresAt: null
+        }];
+
+        const newUser = { uid, username, password, isMaster: !!isMaster, accountId, createdAt, memberships };
         await storage.addUser(newUser);
 
-        res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid });
+        res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid, memberships });
     } catch (err) {
         console.error('Signup error:', err);
         res.status(500).json({ success: false, error: err.message || 'Server error' });
@@ -68,7 +75,14 @@ app.post('/api/auth/login', async (req, res) => {
         if (user.isBlocked) {
             return res.status(403).json({ success: false, error: 'Account is blocked' });
         }
-        res.json({ success: true, username: user.username, isMaster: !!user.isMaster, accountId: user.accountId, uid: user.uid });
+        res.json({ 
+            success: true, 
+            username: user.username, 
+            isMaster: !!user.isMaster, 
+            accountId: user.accountId, 
+            uid: user.uid,
+            memberships: user.memberships || []
+        });
     } catch (err) {
         console.error('Login error:', err);
         res.status(500).json({ success: false, error: err.message || 'Server error' });
@@ -111,6 +125,78 @@ app.delete('/api/auth/users/:uid', async (req, res) => {
     }
 });
 
+// ─── MEMBERSHIPS & PERMISSIONS ────────────────────────────────────────────────
+
+/**
+ * Check if a user has the required permission for a specific account.
+ */
+function checkPermission(user, accountId, requiredRole = 'editor') {
+    if (!user || !user.memberships) return false;
+    
+    const membership = user.memberships.find(m => m.id === accountId);
+    if (!membership) return false;
+
+    // Check expiration if set
+    if (membership.expiresAt && new Date(membership.expiresAt) < new Date()) {
+        return false;
+    }
+
+    const rolesOrder = { 'master': 3, 'editor': 2, 'viewer': 1 };
+    return (rolesOrder[membership.role] || 0) >= (rolesOrder[requiredRole] || 0);
+}
+
+// Join an existing account
+app.post('/api/auth/accounts/join', async (req, res) => {
+    const { uid, accountId } = req.body;
+    try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+
+        const memberships = user.memberships || [];
+        if (memberships.find(m => m.id === accountId)) {
+            return res.status(400).json({ error: 'Already a member of this account' });
+        }
+
+        memberships.push({ id: accountId, role: 'editor', expiresAt: null });
+        await storage.updateUser(uid, { memberships });
+        res.json({ success: true, memberships });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Set role/expiration for a member (Master only)
+app.post('/api/auth/accounts/role', async (req, res) => {
+    const { masterUid, targetUid, accountId, role, expiresAt } = req.body;
+    try {
+        const users = await storage.getUsers();
+        const masterUser = users.find(u => u.uid === masterUid);
+        
+        if (!checkPermission(masterUser, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master of this account can manage roles' });
+        }
+
+        const targetUser = users.find(u => u.uid === targetUid);
+        if (!targetUser) return res.status(404).json({ error: 'Target user not found' });
+
+        const memberships = targetUser.memberships || [];
+        const index = memberships.findIndex(m => m.id === accountId);
+        
+        const newMembership = { id: accountId, role, expiresAt: expiresAt || null };
+        if (index >= 0) {
+            memberships[index] = newMembership;
+        } else {
+            memberships.push(newMembership);
+        }
+
+        await storage.updateUser(targetUid, { memberships });
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // ─── TEMPLATES ────────────────────────────────────────────────────────────────
 
 // Get all templates (for an account)
@@ -126,10 +212,16 @@ app.get('/api/templates', async (req, res) => {
 
 // Create template
 app.post('/api/templates', async (req, res) => {
-    const { accountId, name, customFields = [] } = req.body;
-    const id = uuidv4();
-    const createdAt = new Date().toISOString();
+    const { accountId, name, customFields = [], uid } = req.body; // Expect uid for permission check
     try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, accountId, 'editor')) {
+            return res.status(403).json({ error: 'Insufficient permissions to create templates' });
+        }
+
+        const id = uuidv4();
+        const createdAt = new Date().toISOString();
         const newTemplate = { id, accountId, name, customFields, createdAt };
         await storage.addTemplate(newTemplate);
         res.json(newTemplate);
@@ -141,8 +233,20 @@ app.post('/api/templates', async (req, res) => {
 
 // Update template
 app.put('/api/templates/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.body;
     try {
-        await storage.updateTemplate(req.params.id, req.body);
+        const templates = await storage.getTemplates();
+        const template = templates.find(t => t.id === id);
+        if (!template) return res.status(404).json({ error: 'Template not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, template.accountId, 'editor')) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        await storage.updateTemplate(id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -151,8 +255,20 @@ app.put('/api/templates/:id', async (req, res) => {
 
 // Delete template
 app.delete('/api/templates/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.query; // Assume uid passed as query param for delete
     try {
-        await storage.deleteTemplate(req.params.id);
+        const templates = await storage.getTemplates();
+        const template = templates.find(t => t.id === id);
+        if (!template) return res.status(404).json({ error: 'Template not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, template.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can delete templates' });
+        }
+
+        await storage.deleteTemplate(id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -174,10 +290,16 @@ app.get('/api/members', async (req, res) => {
 
 // Create member
 app.post('/api/members', async (req, res) => {
-    const { templateId, accountId, name, number, phone, identifications = {} } = req.body;
-    const id = uuidv4();
-    const createdAt = new Date().toISOString();
+    const { templateId, accountId, name, number, phone, identifications = {}, uid } = req.body;
     try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, accountId, 'editor')) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        const id = uuidv4();
+        const createdAt = new Date().toISOString();
         const newMember = { id, templateId, accountId, name, number, phone, identifications, createdAt };
         await storage.addMember(newMember);
         res.json(newMember);
@@ -188,8 +310,20 @@ app.post('/api/members', async (req, res) => {
 
 // Update member
 app.put('/api/members/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.body;
     try {
-        await storage.updateMember(req.params.id, req.body);
+        const members = await storage.getMembers();
+        const member = members.find(m => m.id === id);
+        if (!member) return res.status(404).json({ error: 'Member not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, member.accountId, 'editor')) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        await storage.updateMember(id, req.body);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -245,8 +379,20 @@ app.put('/api/services/:id', async (req, res) => {
 
 // Delete service
 app.delete('/api/services/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.query;
     try {
-        await storage.deleteService(req.params.id);
+        const services = await storage.getServices();
+        const service = services.find(s => s.id === id);
+        if (!service) return res.status(404).json({ error: 'Service not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, service.accountId, 'editor')) {
+            return res.status(403).json({ error: 'Insufficient permissions' });
+        }
+
+        await storage.deleteService(id);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
