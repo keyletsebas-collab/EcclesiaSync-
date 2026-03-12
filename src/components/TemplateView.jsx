@@ -27,7 +27,6 @@ const TemplateView = ({ templateId }) => {
         name: '',
         number: '',
         phone: '',
-        accountId: '',
         isLeader: false,
         identifications: {}
     });
@@ -38,7 +37,7 @@ const TemplateView = ({ templateId }) => {
         e.preventDefault();
         await addMember(templateId, newMember);
         setIsAddMemberOpen(false);
-        setNewMember({ name: '', number: '', phone: '', accountId: '', isLeader: false, identifications: {} });
+        setNewMember({ name: '', number: '', phone: '', isLeader: false, identifications: {} });
     };
 
     const handleUpdateTemplateName = async (e) => {
@@ -58,8 +57,7 @@ const TemplateView = ({ templateId }) => {
     const filteredMembers = templateMembers.filter(m =>
         m.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         m.phone.includes(searchTerm) ||
-        String(m.number).includes(searchTerm) ||
-        (m.accountId && m.accountId.toLowerCase().includes(searchTerm.toLowerCase()))
+        String(m.number).includes(searchTerm)
     );
 
     return (
@@ -206,8 +204,7 @@ const TemplateView = ({ templateId }) => {
                             <thead>
                                 <tr>
                                     <th>{t('name')}</th>
-                                    <th>{t('accountId')}</th>
-                                    <th>{t('number')}</th>
+                                    <th>{t('idNumber')}</th>
                                     <th>{t('phone')}</th>
                                     {template.customFields.map(field => (
                                         <th key={field}>{field}</th>
@@ -247,13 +244,13 @@ const TemplateView = ({ templateId }) => {
                                         </td>
                                         <td>
                                             <div 
-                                                onClick={() => member.accountId && copyToClipboard(member.accountId)}
+                                                onClick={() => member.number && copyToClipboard(String(member.number))}
                                                 title={t('clickToCopy') || 'Click para copiar'}
                                                 style={{
                                                     display: 'flex',
                                                     alignItems: 'center',
                                                     gap: '0.4rem',
-                                                    cursor: member.accountId ? 'pointer' : 'default',
+                                                    cursor: member.number ? 'pointer' : 'default',
                                                     fontFamily: 'monospace',
                                                     fontSize: '0.85rem',
                                                     color: 'var(--primary)',
@@ -261,17 +258,16 @@ const TemplateView = ({ templateId }) => {
                                                     letterSpacing: '0.05em',
                                                     padding: '0.2rem 0.4rem',
                                                     borderRadius: '4px',
-                                                    background: copiedId === member.accountId ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
+                                                    background: copiedId === String(member.number) ? 'rgba(99, 102, 241, 0.2)' : 'transparent',
                                                     transition: 'all 0.2s'
                                                 }}
                                             >
-                                                {member.accountId || '-'}
-                                                {member.accountId && (
-                                                    copiedId === member.accountId ? <Check size={12} color="var(--primary)" /> : <Copy size={12} style={{ opacity: 0.5 }} />
+                                                {member.number || '-'}
+                                                {member.number && (
+                                                    copiedId === String(member.number) ? <Check size={12} color="var(--primary)" /> : <Copy size={12} style={{ opacity: 0.5 }} />
                                                 )}
                                             </div>
                                         </td>
-                                        <td>{member.number}</td>
                                         <td>{member.phone}</td>
                                         {template.customFields.map(field => (
                                             <td key={field}>{member.identifications[field] || '-'}</td>
@@ -315,29 +311,6 @@ const TemplateView = ({ templateId }) => {
                         />
                     </div>
 
-                    {/* Account ID */}
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                            {t('accountIdLabel')}
-                            <span style={{ color: '#f87171', marginLeft: '0.25rem' }}>*</span>
-                        </label>
-                        <input
-                            className="glass-input"
-                            value={newMember.accountId}
-                            onChange={e => setNewMember({ ...newMember, accountId: e.target.value.toUpperCase() })}
-                            placeholder="XXXXXXXX"
-                            maxLength={8}
-                            required
-                            style={{
-                                fontFamily: 'monospace',
-                                letterSpacing: '0.1em',
-                                textTransform: 'uppercase'
-                            }}
-                        />
-                        <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.35rem' }}>
-                            🔑 {t('accountIdRequired') || 'El ID de cuenta es obligatorio para añadir a la persona.'}
-                        </p>
-                    </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                         <div>
