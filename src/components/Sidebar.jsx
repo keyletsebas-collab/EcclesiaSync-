@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
 import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, BookOpen } from 'lucide-react';
 import Settings from './Settings';
 
