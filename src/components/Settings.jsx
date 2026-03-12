@@ -218,7 +218,7 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
                         <Download size={16} />{t('installApp')}
                     </h4>
                     <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                        Accede más rápido instalando EcclesiaSync en tu dispositivo.
+                        Accede más rápido instalando LuminaSync en tu dispositivo.
                     </p>
                     <button onClick={onInstallApp} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: '0.875rem' }}>
                         {t('installButton')}

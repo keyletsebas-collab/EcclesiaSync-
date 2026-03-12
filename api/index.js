@@ -10,6 +10,14 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// ─── Environment Validation ──────────────────────────────────────────────────
+const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
+const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+
+if (!AIRTABLE_TOKEN || !AIRTABLE_BASE_ID) {
+    console.error('❌ CRITICAL: Missing Airtable configuration');
+}
+
 const PORT = process.env.PORT || 3001;
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
@@ -54,14 +62,13 @@ app.post('/api/auth/signup', async (req, res) => {
 });
 
 // Login
-app.post('/api/auth/login', async (req, res) => {
-    const { username: rawUsername, password } = req.body;
-    const username = rawUsername?.toLowerCase().trim();
-    
-    console.log(`🔑 Login attempt for: ${username}`);
+app.post('/api/auth/login', async (req, res, next) => {
     try {
+        const { username: rawUsername, password } = req.body;
+        const username = rawUsername?.toLowerCase().trim();
+        
+        console.log(`🔑 Login attempt for: ${username}`);
         const users = await storage.getUsers();
-        console.log(`👥 Total users found in Airtable: ${users.length}`);
         
         const user = users.find(u => 
             u.username?.toLowerCase() === username && 
@@ -69,7 +76,6 @@ app.post('/api/auth/login', async (req, res) => {
         );
 
         if (!user) {
-            console.log(`❌ Login failed: User not found or password mismatch`);
             return res.status(401).json({ success: false, error: 'Invalid username or password' });
         }
         if (user.isBlocked) {
@@ -84,8 +90,7 @@ app.post('/api/auth/login', async (req, res) => {
             memberships: user.memberships || []
         });
     } catch (err) {
-        console.error('Login error:', err);
-        res.status(500).json({ success: false, error: err.message || 'Server error' });
+        next(err);
     }
 });
 
@@ -399,11 +404,19 @@ app.delete('/api/services/:id', async (req, res) => {
     }
 });
 
-// ─── Start Server ─────────────────────────────────────────────────────────────
-// ─── Start Server ─────────────────────────────────────────────────────────────
+// ─── Global Error Handler ─────────────────────────────────────────────────────
+app.use((err, req, res, next) => {
+    console.error('🔴 Server Error:', err);
+    res.status(500).json({
+        success: false,
+        error: 'LuminaSync Server Error',
+        message: err.message,
+        stack: process.env.NODE_ENV === 'development' ? err.stack : undefined
+    });
+});
+
 app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ EcclesiaSync API running on http://localhost:${PORT}`);
-    console.log(`🚀 Using Airtable base: ${process.env.AIRTABLE_BASE_ID}`);
+    console.log(`✅ LuminaSync API running on http://localhost:${PORT}`);
 });
 
 export default app;

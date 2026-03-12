@@ -8,13 +8,14 @@ export const useLanguage = () => {
 };
 
 export const LanguageProvider = ({ children }) => {
+    const appName = 'LuminaSync'; // Define appName here
     const [currentLanguage, setCurrentLanguage] = useState(() => {
-        const saved = localStorage.getItem('app_language');
+        const saved = localStorage.getItem(`${appName}_language`); // Use appName in the key
         return saved || 'en';
     });
 
     useEffect(() => {
-        localStorage.setItem('app_language', currentLanguage);
+        localStorage.setItem(`${appName}_language`, currentLanguage); // Use appName in the key
     }, [currentLanguage]);
 
     const t = (key) => {

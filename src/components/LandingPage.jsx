@@ -1,6 +1,6 @@
 import React from 'react';
 import { useLanguage } from '../context/LanguageContext';
-import { BookOpen, Users, Calendar, Shield, Zap, Globe, ArrowRight, ChevronDown, Play, X } from 'lucide-react';
+import { Sparkles, Users, Calendar, Shield, Zap, Globe, ArrowRight, ChevronDown, Play, X } from 'lucide-react';
 // Build trigger: 2026-02-21 17:18
 
 const LandingPage = ({ onEnter }) => {
@@ -34,10 +34,10 @@ const LandingPage = ({ onEnter }) => {
                         padding: '0.5rem',
                         borderRadius: '10px'
                     }}>
-                        <BookOpen size={20} color="white" />
+                        <Sparkles size={20} color="white" />
                     </div>
-                    <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
-                        EcclesiaSync
+                    <span style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px' }}>
+                        LuminaSync
                     </span>
                 </div>
                 <button
@@ -247,7 +247,7 @@ const LandingPage = ({ onEnter }) => {
                 color: 'var(--text-muted)',
                 fontSize: '0.875rem'
             }}>
-                <p>&copy; 2024 EcclesiaSync. {t('footerNote')}</p>
+                <p>&copy; 2024 LuminaSync. {t('footerNote')}</p>
             </footer>
 
             <style>{`

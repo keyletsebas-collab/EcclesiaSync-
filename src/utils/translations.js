@@ -1,7 +1,7 @@
 export const translations = {
     en: {
         // App
-        appName: 'EcclesiaSync',
+        appName: 'LuminaSync',
 
         // Auth
         login: 'Login',
@@ -27,7 +27,7 @@ export const translations = {
         manageMembers: 'Manage Team',
 
         // Welcome
-        welcomeTitle: 'Welcome to EcclesiaSync',
+        welcomeTitle: 'Welcome to LuminaSync',
         welcomeMessage: 'Select a template from the sidebar to manage members,\nor create a new template to get started.',
         createFirstTemplate: 'Create Your First Template',
 
@@ -126,10 +126,10 @@ export const translations = {
         featureAutoTitle: 'Automatic Startup',
         featureAutoDesc: 'No complex setups every time you turn on your workstation.',
         ctaTitle: 'Ready to take your church to the next level?',
-        ctaButton: 'Access EcclesiaSync',
+        ctaButton: 'Access LuminaSync',
         footerNote: 'A premium solution for Adventist church management.',
-        aboutTitle: 'About EcclesiaSync',
-        aboutBio: 'EcclesiaSync was born from the vision of uniting faith with technological excellence. Designed to modernize church administration, our platform enables total and collaborative synchronization across all ministries. It is a tool created so that every servant can focus on what matters most: the mission, while technology handles the workflow and order.',
+        aboutTitle: 'About LuminaSync',
+        aboutBio: 'LuminaSync was born from the vision of uniting faith with technological excellence. Designed to modernize church administration, our platform enables total and collaborative synchronization across all ministries. It is a tool created so that every servant can focus on what matters most: the mission, while technology handles the workflow and order.',
         installApp: 'Download App (PWA)',
         installButton: 'Install App',
         watchTrailer: 'Watch Trailer',
@@ -137,7 +137,7 @@ export const translations = {
     },
     es: {
         // App
-        appName: 'EcclesiaSync',
+        appName: 'LuminaSync',
 
         // Auth
         login: 'Iniciar Sesión',
@@ -163,7 +163,7 @@ export const translations = {
         manageMembers: 'Gestionar Equipo',
 
         // Welcome
-        welcomeTitle: 'Bienvenido a EcclesiaSync',
+        welcomeTitle: 'Bienvenido a LuminaSync',
         welcomeMessage: 'Selecciona una plantilla de la barra lateral para gestionar miembros,\no crea una nueva plantilla para comenzar.',
         createFirstTemplate: 'Crea Tu Primera Plantilla',
 
@@ -259,10 +259,10 @@ export const translations = {
         featureAutoTitle: 'Inicio Automático',
         featureAutoDesc: 'Sin configuraciones complejas cada vez que encienda su equipo de trabajo.',
         ctaTitle: '¿Listo para llevar su iglesia al siguiente nivel?',
-        ctaButton: 'Acceder a EcclesiaSync',
+        ctaButton: 'Acceder a LuminaSync',
         footerNote: 'Una solución premium para la gestión eclesiástica adventista.',
-        aboutTitle: 'Acerca de EcclesiaSync',
-        aboutBio: 'EcclesiaSync nace de la visión de unir la fe con la excelencia tecnológica. Diseñada para modernizar la administración eclesiástica, nuestra plataforma permite una sincronización total y colaborativa entre todos los ministerios. Es una herramienta creada para que cada servidor pueda enfocarse en lo más importante: la misión, mientras la tecnología se encarga de la fluidez y el orden.',
+        aboutTitle: 'Acerca de LuminaSync',
+        aboutBio: 'LuminaSync nace de la visión de unir la fe con la excelencia tecnológica. Diseñada para modernizar la administración eclesiástica, nuestra plataforma permite una sincronización total y colaborativa entre todos los ministerios. Es una herramienta creada para que cada servidor pueda enfocarse en lo más importante: la misión, mientras la tecnología se encarga de la fluidez y el orden.',
         installApp: 'Descargar App (PWA)',
         installButton: 'Instalar Aplicación',
         watchTrailer: 'Ver Tráiler',

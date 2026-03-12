@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, BookOpen } from 'lucide-react';
+import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles } from 'lucide-react';
 import Settings from './Settings';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstallApp, canInstall }) => {
@@ -17,14 +17,24 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                 <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
                     <div style={{
                         background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        padding: '0.5rem',
-                        borderRadius: '10px',
-                        boxShadow: '0 4px 12px var(--primary-glow)'
+                        padding: '0.6rem',
+                        borderRadius: '12px',
+                        boxShadow: '0 8px 16px var(--primary-glow)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
                     }}>
-                        <BookOpen size={20} color="white" />
+                        <Sparkles size={20} color="white" />
                     </div>
-                    <span style={{ fontWeight: 800, fontSize: '1.25rem', letterSpacing: '-0.02em' }}>
-                        EcclesiaSync
+                    <span style={{ 
+                        fontWeight: 800, 
+                        fontSize: '1.5rem', 
+                        letterSpacing: '-1px',
+                        background: 'linear-gradient(to right, #fff, var(--text-muted))',
+                        WebkitBackgroundClip: 'text',
+                        WebkitTextFillColor: 'transparent'
+                    }}>
+                        LuminaSync
                     </span>
                 </div>
 

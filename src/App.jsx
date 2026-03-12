@@ -4,7 +4,7 @@ import Auth from './components/Auth';
 import { useStorage } from './context/StorageContext';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
-import { Plus, BookOpen } from 'lucide-react';
+import { Plus, Sparkles } from 'lucide-react';
 import Modal from './components/Modal';
 import LandingPage from './components/LandingPage';
 import TemplateView from './components/TemplateView';
@@ -86,20 +86,21 @@ function App() {
       {/* Version Indicator */}
       <div style={{
         position: 'fixed',
-        top: '10px',
-        right: '10px',
+        top: '20px',
+        right: '24px',
         zIndex: 9999,
-        background: 'rgba(15, 23, 42, 0.6)',
-        backdropFilter: 'blur(4px)',
-        padding: '2px 8px',
+        background: 'rgba(2, 6, 23, 0.4)',
+        backdropFilter: 'blur(12px)',
+        padding: '6px 12px',
         borderRadius: '100px',
-        fontSize: '10px',
-        color: 'rgba(255, 255, 255, 0.5)',
-        border: '1px solid rgba(255, 255, 255, 0.1)',
-        pointerEvents: 'none',
-        fontFamily: 'monospace'
+        fontSize: '11px',
+        fontWeight: 600,
+        color: 'var(--primary)',
+        border: '1px solid var(--border)',
+        letterSpacing: '0.05em',
+        pointerEvents: 'none'
       }}>
-        EcclesiaSync v2.0.2
+        LuminaSync CORE v3.0
       </div>
 
       <Sidebar
@@ -124,16 +125,27 @@ function App() {
             textAlign: 'center'
           }}>
             <div style={{
-              background: 'linear-gradient(135deg, var(--bg-card) 0%, rgba(99, 102, 241, 0.1) 100%)',
-              padding: '3rem',
-              borderRadius: '50%',
+              background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+              padding: '2.5rem',
+              borderRadius: '24px',
               marginBottom: '2rem',
-              border: '1px solid var(--border)',
+              boxShadow: '0 20px 50px rgba(99, 102, 241, 0.3)',
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center'
+              justifyContent: 'center',
+              position: 'relative',
+              overflow: 'hidden'
             }}>
-              <BookOpen size={64} style={{ color: 'var(--primary)', opacity: 0.8 }} />
+              <div style={{
+                position: 'absolute',
+                top: '-50%',
+                left: '-50%',
+                width: '200%',
+                height: '200%',
+                background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)',
+                animation: 'pulse 4s infinite alternate'
+              }} />
+              <Sparkles size={64} color="white" style={{ position: 'relative', zIndex: 2 }} />
             </div>
             <h1>{t('welcomeTitle')}</h1>
             <p style={{ maxWidth: '400px', lineHeight: '1.6', color: 'var(--text-muted)' }}>

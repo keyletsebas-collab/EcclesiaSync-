@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
-import { LogIn, UserPlus, Shield, BookOpen } from 'lucide-react';
+import { LogIn, UserPlus, Shield, Sparkles } from 'lucide-react';
 import AdminPanel from './AdminPanel';
 
 const Auth = () => {
@@ -86,10 +86,14 @@ const Auth = () => {
                         borderRadius: '16px',
                         marginBottom: '1rem'
                     }}>
-                        <BookOpen size={32} color="white" />
+                        <Sparkles size={32} color="white" />
                     </div>
-                    <h1 style={{ fontSize: '1.75rem', marginBottom: '0.5rem' }}>
-                        {t('appName')}
+                    <h1 style={{ 
+                        fontSize: '2.25rem', 
+                        marginBottom: '0.25rem',
+                        fontWeight: 800
+                    }}>
+                        LuminaSync
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                         {isLogin ? t('login') : t('signup')}

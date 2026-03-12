@@ -1,6 +1,6 @@
 {
-    "name": "EcclesiaSync",
-    "short_name": "EcclesiaSync",
+    "name": "LuminaSync",
+    "short_name": "LuminaSync",
     "description": "Sincronización y gestión eclesiástica con excelencia",
     "start_url": "/",
     "display": "standalone",

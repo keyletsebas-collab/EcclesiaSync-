@@ -1,7 +1,7 @@
 import base from './db.js';
 
 /**
- * EcclesiaSync Storage Layer — Airtable
+ * LuminaSync Storage Layer — Airtable
  *
  * Airtable table structure required (create these in your Base):
  *
@@ -53,9 +53,14 @@ function toObj(record) {
         }
 
         // Parse memberships (should be an array of {id, role, expiresAt})
-        if (typeof fields.memberships === 'string') {
-            try { fields.memberships = JSON.parse(fields.memberships); } catch (e) { fields.memberships = []; }
-        } else if (!Array.isArray(fields.memberships)) {
+        if (typeof fields.memberships === 'string' && fields.memberships.trim() !== '') {
+            try { 
+                fields.memberships = JSON.parse(fields.memberships); 
+            } catch (e) { 
+                console.warn('Failed to parse memberships JSON:', fields.memberships);
+                fields.memberships = []; 
+            }
+        } else {
             fields.memberships = [];
         }
 
