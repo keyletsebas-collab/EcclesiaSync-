@@ -21,7 +21,7 @@ namespace LuminaSync.Maui
             InitializeComponent();
         }
 
-        protected override void OnAppearing()
+        protected override async void OnAppearing()
         {
             base.OnAppearing();
             if (!_isInitialized)
@@ -29,7 +29,23 @@ namespace LuminaSync.Maui
                 _isInitialized = true;
                 InitializeApp();
 
-                MyWebView.Source = "index.html";
+                try
+                {
+                    using var stream = await FileSystem.OpenAppPackageFileAsync("index.html");
+                    using var reader = new StreamReader(stream);
+                    string htmlContent = await reader.ReadToEndAsync();
+
+                    MyWebView.Source = new HtmlWebViewSource
+                    {
+                        Html = htmlContent,
+                        BaseUrl = "file:///android_asset/"
+                    };
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"[App] Failed to load local index.html string: {ex.Message}");
+                    MyWebView.Source = "index.html"; // Fallback
+                }
             }
         }
 
