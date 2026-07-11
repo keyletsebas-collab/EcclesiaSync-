@@ -32,3 +32,21 @@ lerna-debug.log*
 .vercel
 
 .vercel
+
+# .NET / C# ignores
+[Bb]in/
+[Oo]bj/
+.vs/
+*.db
+*.db-journal
+*.user
+AppDir/
+LuminaSync.Linux/bin/
+LuminaSync.Linux/obj/
+LuminaSync.Core/bin/
+LuminaSync.Core/obj/
+LuminaSync.Maui/bin/
+LuminaSync.Maui/obj/
+LuminaSync.Maui/Resources/Raw/*
+!LuminaSync.Maui/Resources/Raw/index.html
+

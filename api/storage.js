@@ -1,239 +1,311 @@
-import base from './db.js';
+import supabase from './supabase.js';
 
 /**
- * LuminaSync Storage Layer — Airtable
- *
- * Airtable table structure required (create these in your Base):
- *
- *  ┌─ Users ──────────────────────────────────────────────────────────┐
- *  │  uid (Single line text)   username (Single line text, unique)    │
- *  │  password (Single line)   isMaster (Checkbox)                    │
- *  │  accountId (Single line)  createdAt (Single line)                │
- *  └──────────────────────────────────────────────────────────────────┘
- *
- *  ┌─ Templates ──────────────────────────────────────────────────────┐
- *  │  id (Single line)   accountId (Single line)   name (Single line) │
- *  │  customFields (Long text / JSON)   createdAt (Single line)       │
- *  └──────────────────────────────────────────────────────────────────┘
- *
- *  ┌─ Members ────────────────────────────────────────────────────────┐
- *  │  id (Single line)      templateId (Single line)                  │
- *  │  accountId (Single)    name (Single line)   number (Number)      │
- *  │  phone (Single line)   identifications (Long text / JSON)        │
- *  │  createdAt (Single line)                                         │
- *  └──────────────────────────────────────────────────────────────────┘
- *
- *  ┌─ Services ───────────────────────────────────────────────────────┐
- *  │  id (Single)       templateId (Single)    memberId (Single)      │
- *  │  accountId (Single)  memberName (Single)  serviceDate (Single)   │
- *  │  serviceType (Single)  createdAt (Single)                        │
- *  └──────────────────────────────────────────────────────────────────┘
+ * LuminaSync Storage Layer — Supabase
  */
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
+// ─── Mapping Helpers ─────────────────────────────────────────────────────────
 
-/** Convierte un record de Airtable a objeto plano y parsea campos JSON */
-function toObj(record) {
-    if (!record) return null;
-    try {
-        const fields = { ...record.fields };
-        
-        // Parse customFields (should be an array)
-        if (typeof fields.customFields === 'string') {
-            try { fields.customFields = JSON.parse(fields.customFields); } catch (e) { fields.customFields = []; }
-        } else if (!Array.isArray(fields.customFields)) {
-            fields.customFields = [];
-        }
-
-        // Parse identifications (should be an object)
-        if (typeof fields.identifications === 'string') {
-            try { fields.identifications = JSON.parse(fields.identifications); } catch (e) { fields.identifications = {}; }
-        } else if (!fields.identifications || typeof fields.identifications !== 'object') {
-            fields.identifications = {};
-        }
-
-        // Parse memberships (should be an array of {id, role, expiresAt})
-        if (typeof fields.memberships === 'string' && fields.memberships.trim() !== '') {
-            try { 
-                fields.memberships = JSON.parse(fields.memberships); 
-            } catch (e) { 
-                console.warn('Failed to parse memberships JSON:', fields.memberships);
-                fields.memberships = []; 
-            }
-        } else {
-            fields.memberships = [];
-        }
-
-        // Ensure common fields have defaults to prevent UI rendering issues
-        fields.name = fields.name ?? '';
-        fields.phone = fields.phone ?? '';
-        fields.accountId = fields.accountId ?? '';
-        fields.serviceType = fields.serviceType ?? '';
-        
-        return { _recId: record.id, ...fields };
-    } catch (e) {
-        console.error('Mapping error for record:', record.id, e);
-        return { _recId: record.id };
-    }
+// Map JS object to Supabase row (camelCase -> snake_case)
+function userToRow(user) {
+    if (!user) return null;
+    return {
+        uid: user.uid,
+        username: user.username,
+        password: user.password,
+        is_master: user.isMaster,
+        account_id: user.accountId,
+        created_at: user.createdAt,
+        is_blocked: user.isBlocked,
+        memberships: user.memberships
+    };
 }
 
-/** Obtiene todos los registros de una tabla con filtro opcional.
- * Si el filtro falla por campo desconocido, reintenta sin filtro y filtra en JS. */
-async function getAll(table, formula = '', fallbackFilter = null) {
-    try {
-        const opts = formula ? { filterByFormula: formula } : {};
-        const records = await base(table).select(opts).all();
-        return records.map(toObj);
-    } catch (err) {
-        if (err.message?.includes('Unknown field names') && fallbackFilter) {
-            console.warn(`⚠️ Schema mismatch in "${table}": ${err.message}`);
-            console.warn(`💡 Fetching all records and filtering in JS (fallback mode).`);
-            console.warn(`💡 To fix permanently, run: node api/setup-tables.js`);
-            try {
-                const records = await base(table).select({}).all();
-                return records.map(toObj).filter(fallbackFilter);
-            } catch (err2) {
-                console.error(`Airtable error fetching from ${table} (fallback):`, err2.message);
-                return [];
-            }
-        }
-        if (err.message?.includes('Unknown field names')) {
-            console.error(`⚠️ Schema mismatch in table "${table}": ${err.message}`);
-            console.log(`💡 Try running: node api/setup-tables.js to fix the schema.`);
-        } else {
-            console.error(`Airtable error fetching from ${table}:`, err.message);
-        }
-        return [];
-    }
+// Map Supabase row to JS object (snake_case -> camelCase)
+function userToObj(row) {
+    if (!row) return null;
+    return {
+        uid: row.uid,
+        username: row.username,
+        password: row.password,
+        isMaster: row.is_master,
+        accountId: row.account_id,
+        createdAt: row.created_at,
+        isBlocked: row.is_blocked,
+        memberships: typeof row.memberships === 'string' ? JSON.parse(row.memberships) : row.memberships || []
+    };
 }
 
-/** JSON stringify seguro para campos que deben ser strings */
-const jsonStr = v => (typeof v === 'object' ? JSON.stringify(v) : v ?? '');
+function templateToRow(template) {
+    if (!template) return null;
+    return {
+        id: template.id,
+        account_id: template.accountId,
+        name: template.name,
+        custom_fields: template.customFields,
+        created_at: template.createdAt
+    };
+}
 
-// ─── Storage API ──────────────────────────────────────────────────────────────
+function templateToObj(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        accountId: row.account_id,
+        name: row.name,
+        customFields: typeof row.custom_fields === 'string' ? JSON.parse(row.custom_fields) : row.custom_fields || [],
+        createdAt: row.created_at
+    };
+}
+
+function memberToRow(member) {
+    if (!member) return null;
+    return {
+        id: member.id,
+        template_id: member.templateId,
+        account_id: member.accountId,
+        name: member.name,
+        number: (member.number === '' || member.number === null || member.number === undefined) ? 0 : parseInt(member.number, 10),
+        phone: member.phone,
+        identifications: member.identifications,
+        created_at: member.createdAt
+    };
+}
+
+function memberToObj(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        accountId: row.account_id,
+        name: row.name,
+        number: row.number,
+        phone: row.phone,
+        identifications: typeof row.identifications === 'string' ? JSON.parse(row.identifications) : row.identifications || {},
+        createdAt: row.created_at
+    };
+}
+
+function serviceToRow(service) {
+    if (!service) return null;
+    return {
+        id: service.id,
+        template_id: service.templateId,
+        member_id: service.memberId,
+        account_id: service.accountId,
+        member_name: service.memberName,
+        service_date: service.serviceDate,
+        service_type: service.serviceType,
+        created_at: service.createdAt
+    };
+}
+
+function serviceToObj(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        memberId: row.member_id,
+        accountId: row.account_id,
+        memberName: row.member_name,
+        serviceDate: row.service_date,
+        serviceType: row.service_type,
+        createdAt: row.created_at
+    };
+}
+
+// ─── Storage API ─────────────────────────────────────────────────────────────
 
 export const storage = {
 
-    // ── Users ─────────────────────────────────────────────────────────────────
+    // ── Users ────────────────────────────────────────────────────────────────
 
-    getUsers: () => getAll('Users'),
+    getUsers: async () => {
+        const { data, error } = await supabase.from('users').select('*');
+        if (error) {
+            console.error('Error fetching users:', error);
+            return [];
+        }
+        return data.map(userToObj);
+    },
 
     addUser: async (user) => {
-        const { uid, username, password, isMaster, accountId, createdAt, memberships } = user;
-        await base('Users').create([{
-            fields: { 
-                uid, username, password, 
-                isMaster: !!isMaster, accountId, createdAt, 
-                isBlocked: false,
-                memberships: jsonStr(memberships || [])
-            }
-        }]);
+        const row = userToRow({ ...user, isBlocked: false });
+        const { error } = await supabase.from('users').insert([row]);
+        if (error) {
+            console.error('Error adding user:', error);
+            throw error;
+        }
         return user;
     },
 
     updateUser: async (uid, updates) => {
-        // Buscar el record ID de Airtable primero
-        const records = await getAll('Users', `{uid} = '${uid}'`);
-        if (!records.length) return;
-        
-        const fields = { ...updates };
-        if (fields.memberships) fields.memberships = jsonStr(fields.memberships);
-        
-        await base('Users').update(records[0]._recId, fields);
+        const rowUpdates = {};
+        if (updates.username !== undefined) rowUpdates.username = updates.username;
+        if (updates.password !== undefined) rowUpdates.password = updates.password;
+        if (updates.isMaster !== undefined) rowUpdates.is_master = updates.isMaster;
+        if (updates.accountId !== undefined) rowUpdates.account_id = updates.accountId;
+        if (updates.isBlocked !== undefined) rowUpdates.is_blocked = updates.isBlocked;
+        if (updates.memberships !== undefined) rowUpdates.memberships = updates.memberships;
+
+        const { error } = await supabase.from('users').update(rowUpdates).eq('uid', uid);
+        if (error) {
+            console.error(`Error updating user ${uid}:`, error);
+            throw error;
+        }
     },
 
     deleteUser: async (uid) => {
-        const records = await getAll('Users', `{uid} = '${uid}'`);
-        if (records.length) await base('Users').destroy(records[0]._recId);
+        const { error } = await supabase.from('users').delete().eq('uid', uid);
+        if (error) {
+            console.error(`Error deleting user ${uid}:`, error);
+            throw error;
+        }
     },
 
-    // ── Templates ─────────────────────────────────────────────────────────────
+    // ── Templates ────────────────────────────────────────────────────────────
 
-    getTemplates: (accountId) =>
-        getAll('Templates', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
+    getTemplates: async (accountId) => {
+        let query = supabase.from('templates').select('*');
+        if (accountId) {
+            query = query.eq('account_id', accountId);
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error('Error fetching templates:', error);
+            return [];
+        }
+        return data.map(templateToObj);
+    },
 
     addTemplate: async (template) => {
-        const { id, accountId, name, customFields, createdAt } = template;
-        await base('Templates').create([{
-            fields: { id, accountId, name, customFields: jsonStr(customFields), createdAt }
-        }]);
+        const row = templateToRow(template);
+        const { error } = await supabase.from('templates').insert([row]);
+        if (error) {
+            console.error('Error adding template:', error);
+            throw error;
+        }
         return template;
     },
 
     updateTemplate: async (id, updates) => {
-        const records = await getAll('Templates', `{id} = '${id}'`);
-        if (!records.length) return;
-        const fields = { ...updates };
-        if (fields.customFields) fields.customFields = jsonStr(fields.customFields);
-        await base('Templates').update(records[0]._recId, fields);
+        const rowUpdates = {};
+        if (updates.name !== undefined) rowUpdates.name = updates.name;
+        if (updates.customFields !== undefined) rowUpdates.custom_fields = updates.customFields;
+        if (updates.accountId !== undefined) rowUpdates.account_id = updates.accountId;
+
+        const { error } = await supabase.from('templates').update(rowUpdates).eq('id', id);
+        if (error) {
+            console.error(`Error updating template ${id}:`, error);
+            throw error;
+        }
     },
 
     deleteTemplate: async (id) => {
-        // Borrar services y members dependientes primero
-        const services = await getAll('Services', `{templateId} = '${id}'`, r => r.templateId === id);
-        const members = await getAll('Members', `{templateId} = '${id}'`);
-        for (const r of services) await base('Services').destroy(r._recId);
-        for (const r of members) await base('Members').destroy(r._recId);
-        const templates = await getAll('Templates', `{id} = '${id}'`);
-        if (templates.length) await base('Templates').destroy(templates[0]._recId);
+        const { error } = await supabase.from('templates').delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting template ${id}:`, error);
+            throw error;
+        }
     },
 
-    // ── Members ───────────────────────────────────────────────────────────────
+    // ── Members ──────────────────────────────────────────────────────────────
 
-    getMembers: (accountId) =>
-        getAll('Members', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
+    getMembers: async (accountId) => {
+        let query = supabase.from('members').select('*');
+        if (accountId) {
+            query = query.eq('account_id', accountId);
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error('Error fetching members:', error);
+            return [];
+        }
+        return data.map(memberToObj);
+    },
 
     addMember: async (member) => {
-        const { id, templateId, accountId, name, number, phone, identifications, createdAt } = member;
-        await base('Members').create([{
-            fields: {
-                id, templateId, accountId,
-                name: name ?? '',
-                number: number ?? 0,
-                phone: phone ?? '',
-                identifications: jsonStr(identifications),
-                createdAt
-            }
-        }]);
+        const row = memberToRow(member);
+        const { error } = await supabase.from('members').insert([row]);
+        if (error) {
+            console.error('Error adding member:', error);
+            throw error;
+        }
         return member;
     },
 
     updateMember: async (id, updates) => {
-        const records = await getAll('Members', `{id} = '${id}'`);
-        if (!records.length) return;
-        const fields = { ...updates };
-        if (fields.identifications) fields.identifications = jsonStr(fields.identifications);
-        await base('Members').update(records[0]._recId, fields);
+        const rowUpdates = {};
+        if (updates.templateId !== undefined) rowUpdates.template_id = updates.templateId;
+        if (updates.accountId !== undefined) rowUpdates.account_id = updates.accountId;
+        if (updates.name !== undefined) rowUpdates.name = updates.name;
+        if (updates.number !== undefined) {
+            rowUpdates.number = (updates.number === '' || updates.number === null || updates.number === undefined) ? 0 : parseInt(updates.number, 10);
+        }
+        if (updates.phone !== undefined) rowUpdates.phone = updates.phone;
+        if (updates.identifications !== undefined) rowUpdates.identifications = updates.identifications;
+
+        const { error } = await supabase.from('members').update(rowUpdates).eq('id', id);
+        if (error) {
+            console.error(`Error updating member ${id}:`, error);
+            throw error;
+        }
     },
 
     deleteMember: async (id) => {
-        const services = await getAll('Services', `{memberId} = '${id}'`, r => r.memberId === id);
-        for (const r of services) await base('Services').destroy(r._recId);
-        const members = await getAll('Members', `{id} = '${id}'`);
-        if (members.length) await base('Members').destroy(members[0]._recId);
+        const { error } = await supabase.from('members').delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting member ${id}:`, error);
+            throw error;
+        }
     },
 
-    // ── Services ──────────────────────────────────────────────────────────────
+    // ── Services ─────────────────────────────────────────────────────────────
 
-    getServices: (accountId) =>
-        getAll('Services', `{accountId} = '${accountId}'`, r => !r.accountId || r.accountId === accountId),
+    getServices: async (accountId) => {
+        let query = supabase.from('services').select('*');
+        if (accountId) {
+            query = query.eq('account_id', accountId);
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error('Error fetching services:', error);
+            return [];
+        }
+        return data.map(serviceToObj);
+    },
 
     addService: async (service) => {
-        const { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt } = service;
-        await base('Services').create([{
-            fields: { id, templateId, memberId, accountId, memberName, serviceDate, serviceType: serviceType ?? '', createdAt }
-        }]);
+        const row = serviceToRow(service);
+        const { error } = await supabase.from('services').insert([row]);
+        if (error) {
+            console.error('Error adding service:', error);
+            throw error;
+        }
         return service;
     },
 
     updateService: async (id, updates) => {
-        const records = await getAll('Services', `{id} = '${id}'`);
-        if (!records.length) return;
-        await base('Services').update(records[0]._recId, updates);
+        const rowUpdates = {};
+        if (updates.templateId !== undefined) rowUpdates.template_id = updates.templateId;
+        if (updates.memberId !== undefined) rowUpdates.member_id = updates.memberId;
+        if (updates.accountId !== undefined) rowUpdates.account_id = updates.accountId;
+        if (updates.memberName !== undefined) rowUpdates.member_name = updates.memberName;
+        if (updates.serviceDate !== undefined) rowUpdates.service_date = updates.serviceDate;
+        if (updates.serviceType !== undefined) rowUpdates.service_type = updates.serviceType;
+
+        const { error } = await supabase.from('services').update(rowUpdates).eq('id', id);
+        if (error) {
+            console.error(`Error updating service ${id}:`, error);
+            throw error;
+        }
     },
 
     deleteService: async (id) => {
-        const records = await getAll('Services', `{id} = '${id}'`);
-        if (records.length) await base('Services').destroy(records[0]._recId);
+        const { error } = await supabase.from('services').delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting service ${id}:`, error);
+            throw error;
+        }
     }
 };

@@ -8,39 +8,25 @@ import { Plus, Sparkles } from 'lucide-react';
 import Modal from './components/Modal';
 import LandingPage from './components/LandingPage';
 import TemplateView from './components/TemplateView';
+import AdminsView from './components/AdminsView';
+import HistoryView from './components/HistoryView';
+import DashboardView from './components/DashboardView';
 
 function App() {
   const { isAuthenticated } = useAuth();
   const { addTemplate } = useStorage();
   const { t } = useLanguage();
   const [activeTemplateId, setActiveTemplateId] = useState(null);
+  const [activeView, setActiveView] = useState('templates'); // 'templates' or 'admins'
   const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
-  const [showLanding, setShowLanding] = useState(true);
+  const [showLanding, setShowLanding] = useState(false);
 
   // New Template Form State
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateFields, setNewTemplateFields] = useState(['']);
+  const [newTemplateType, setNewTemplateType] = useState('diaconos');
 
-  // PWA Install State
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
 
-  useEffect(() => {
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstallClick = async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') {
-      setDeferredPrompt(null);
-    }
-  };
 
   // Show Portada if not authenticated and showLanding is true
   if (!isAuthenticated && showLanding) {
@@ -58,12 +44,18 @@ function App() {
     e.preventDefault();
     if (!newTemplateName.trim()) return;
 
-    const fields = newTemplateFields.filter(f => f.trim() !== '');
+    let fields = [];
+    if (newTemplateType === 'poesia') {
+      fields = ['__poetry__'];
+    } else {
+      fields = newTemplateFields.filter(f => f.trim() !== '');
+    }
     try {
       await addTemplate(newTemplateName, fields);
       // Reset and close
       setNewTemplateName('');
       setNewTemplateFields(['']);
+      setNewTemplateType('diaconos');
       setIsNewTemplateModalOpen(false);
     } catch (err) {
       alert(`No se pudo crear la plantilla: ${err.message}`);
@@ -105,66 +97,50 @@ function App() {
         letterSpacing: '0.05em',
         pointerEvents: 'none'
       }}>
-        LuminaSync CORE v3.0
+        VerbumSync CORE v3.0
       </div>
 
       <Sidebar
         activeTemplate={activeTemplateId}
-        onSelectTemplate={setActiveTemplateId}
+        onSelectTemplate={(id) => {
+          setActiveTemplateId(id);
+          setActiveView('templates');
+        }}
         onOpenNewTemplate={() => setIsNewTemplateModalOpen(true)}
-        onInstallApp={handleInstallClick}
-        canInstall={!!deferredPrompt}
+        activeView={activeView}
+        onSelectAdmins={() => {
+          setActiveTemplateId(null);
+          setActiveView('admins');
+        }}
+        onSelectHistory={() => {
+          setActiveTemplateId(null);
+          setActiveView('history');
+        }}
       />
 
       <main className="main-content">
-        {activeTemplateId ? (
-          <TemplateView templateId={activeTemplateId} />
+        {activeView === 'admins' ? (
+          <AdminsView />
+        ) : activeView === 'history' ? (
+          <HistoryView />
+        ) : activeTemplateId ? (
+          <TemplateView templateId={activeTemplateId} onDeleted={() => setActiveTemplateId(null)} />
         ) : (
-          <div style={{
-            height: '100%',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--text-main)',
-            textAlign: 'center'
-          }}>
-            <div style={{
-              background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-              padding: '2.5rem',
-              borderRadius: '24px',
-              marginBottom: '2rem',
-              boxShadow: '0 20px 50px rgba(99, 102, 241, 0.3)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              position: 'relative',
-              overflow: 'hidden'
-            }}>
-              <div style={{
-                position: 'absolute',
-                top: '-50%',
-                left: '-50%',
-                width: '200%',
-                height: '200%',
-                background: 'radial-gradient(circle, rgba(255,255,255,0.2) 0%, transparent 70%)',
-                animation: 'pulse 4s infinite alternate'
-              }} />
-              <Sparkles size={64} color="white" style={{ position: 'relative', zIndex: 2 }} />
-            </div>
-            <h1>{t('welcomeTitle')}</h1>
-            <p style={{ maxWidth: '400px', lineHeight: '1.6', color: 'var(--text-muted)' }}>
-              {t('welcomeMessage')}
-            </p>
-            <button
-              className="btn btn-primary"
-              style={{ marginTop: '2rem' }}
-              onClick={() => setIsNewTemplateModalOpen(true)}
-            >
-              <Plus size={18} />
-              {t('createFirstTemplate')}
-            </button>
-          </div>
+          <DashboardView
+            onSelectTemplate={(id) => {
+              setActiveTemplateId(id);
+              setActiveView('templates');
+            }}
+            onSelectAdmins={() => {
+              setActiveTemplateId(null);
+              setActiveView('admins');
+            }}
+            onSelectHistory={() => {
+              setActiveTemplateId(null);
+              setActiveView('history');
+            }}
+            onOpenNewTemplate={() => setIsNewTemplateModalOpen(true)}
+          />
         )}
       </main>
 
@@ -174,6 +150,19 @@ function App() {
         title={t('createNewTemplate')}
       >
         <form onSubmit={handleCreateTemplate}>
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Tipo de Plantilla</label>
+            <select
+              className="glass-input"
+              value={newTemplateType}
+              onChange={(e) => setNewTemplateType(e.target.value)}
+              style={{ width: '100%', padding: '0.6rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
+            >
+              <option value="diaconos">🏛️ Diáconos (Estándar)</option>
+              <option value="poesia">📖 Poesía (Biblioteca y Digitalización)</option>
+            </select>
+          </div>
+
           <div style={{ marginBottom: '1rem' }}>
             <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>{t('templateName')}</label>
             <input
@@ -185,37 +174,52 @@ function App() {
             />
           </div>
 
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-              {t('customFields')} <span style={{ color: 'var(--text-muted)' }}>{t('optional')}</span>
-            </label>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-              {newTemplateFields.map((field, index) => (
-                <input
-                  key={index}
-                  className="glass-input"
-                  value={field}
-                  onChange={(e) => handleFieldChange(index, e.target.value)}
-                  placeholder={t('fieldPlaceholder').replace('{n}', index + 1)}
-                />
-              ))}
-              <button
-                type="button"
-                onClick={handleAddField}
-                style={{
-                  background: 'none',
-                  border: '1px dashed var(--border)',
-                  color: 'var(--text-muted)',
-                  padding: '0.5rem',
-                  borderRadius: 'var(--radius)',
-                  cursor: 'pointer',
-                  fontSize: '0.875rem'
-                }}
-              >
-                {t('addField')}
-              </button>
+          {newTemplateType === 'diaconos' ? (
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                {t('customFields')} <span style={{ color: 'var(--text-muted)' }}>{t('optional')}</span>
+              </label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                {newTemplateFields.map((field, index) => (
+                  <input
+                    key={index}
+                    className="glass-input"
+                    value={field}
+                    onChange={(e) => handleFieldChange(index, e.target.value)}
+                    placeholder={t('fieldPlaceholder').replace('{n}', index + 1)}
+                  />
+                ))}
+                <button
+                  type="button"
+                  onClick={handleAddField}
+                  style={{
+                    background: 'none',
+                    border: '1px dashed var(--border)',
+                    color: 'var(--text-muted)',
+                    padding: '0.5rem',
+                    borderRadius: 'var(--radius)',
+                    cursor: 'pointer',
+                    fontSize: '0.875rem'
+                  }}
+                >
+                  {t('addField')}
+                </button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div style={{
+              background: 'rgba(99, 102, 241, 0.05)',
+              border: '1px solid rgba(99, 102, 241, 0.2)',
+              borderRadius: 'var(--radius)',
+              padding: '1rem',
+              marginBottom: '1rem',
+              fontSize: '0.8125rem',
+              color: 'var(--text-muted)',
+              lineHeight: '1.4'
+            }}>
+              ✨ <strong>Plantilla de Poesía:</strong> Esta plantilla incluye automáticamente una biblioteca digital, visualización de versos y estrofas con fuentes premium, y digitalización de fotos o documentos mediante Inteligencia Artificial (Google Gemini OCR).
+            </div>
+          )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
             <button

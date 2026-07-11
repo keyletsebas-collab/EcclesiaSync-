@@ -11,24 +11,88 @@ app.use(cors());
 app.use(express.json());
 
 // ─── Environment Validation ──────────────────────────────────────────────────
-const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
-const AIRTABLE_BASE_ID = process.env.AIRTABLE_BASE_ID;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
-if (!AIRTABLE_TOKEN || !AIRTABLE_BASE_ID) {
-    console.error('❌ CRITICAL: Missing Airtable configuration');
+if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+    console.error('❌ CRITICAL: Missing Supabase configuration');
 }
 
 const PORT = process.env.PORT || 3001;
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/config', (req, res) => {
+    res.json({
+        supabaseUrl: process.env.SUPABASE_URL || '',
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+    });
+});
+
+// Auto join all templates of an account for a user using their name
+async function autoJoinTemplates(accountId, name, phone) {
+    if (!name || !name.trim()) return;
+    try {
+        const templates = await storage.getTemplates();
+        const accountTemplates = templates.filter(t => t.accountId === accountId);
+        const members = await storage.getMembers();
+        
+        for (const template of accountTemplates) {
+            const templateMembers = members.filter(m => m.templateId === template.id);
+            const exists = templateMembers.some(m => m.name?.toLowerCase().trim() === name.toLowerCase().trim());
+            if (!exists) {
+                const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
+                const nextNumber = maxNumber + 1;
+                
+                const newMember = {
+                    id: uuidv4(),
+                    templateId: template.id,
+                    accountId: accountId,
+                    name: name.trim(),
+                    number: nextNumber,
+                    phone: phone?.trim() || '',
+                    identifications: {
+                        familyRole: '',
+                        familyName: '',
+                        hasKey: false,
+                        needsPrayer: false
+                    },
+                    createdAt: new Date().toISOString()
+                };
+                await storage.addMember(newMember);
+                console.log(`Auto-joined member ${name} to template ${template.name}`);
+            }
+        }
+    } catch (err) {
+        console.error('Failed to auto join templates:', err);
+    }
+}
+
+// Middleware to verify if the requester is the main admin 'keylet'
+async function checkIsKeylet(req, res, next) {
+    const userUid = req.headers['x-user-uid'] || req.query.uid || req.body.uid;
+    if (!userUid) {
+        return res.status(401).json({ error: 'Unauthorized: Missing User ID' });
+    }
+    try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === userUid);
+        if (!user || user.username?.toLowerCase() !== 'keylet') {
+            return res.status(403).json({ error: 'Access denied: Restringido al administrador principal' });
+        }
+        req.currentUser = user;
+        next();
+    } catch (err) {
+        res.status(500).json({ error: 'Internal validation error' });
+    }
+}
 
 // ─── AUTH ─────────────────────────────────────────────────────────────────────
 
 // Signup
 app.post('/api/auth/signup', async (req, res) => {
-    const { username: rawUsername, password, isMaster = false, accountId: joinedAccountId } = req.body;
-    const username = rawUsername?.toLowerCase().trim();
+    const { username: rawUsername, password, isMaster = false, accountId: joinedAccountId, fullName = '', phone = '', email = '' } = req.body;
+    const username = (email || rawUsername)?.toLowerCase().trim();
 
     try {
         const users = await storage.getUsers();
@@ -48,11 +112,17 @@ app.post('/api/auth/signup', async (req, res) => {
         const memberships = [{
             id: accountId,
             role: !!isMaster ? 'master' : 'editor',
-            expiresAt: null
+            expiresAt: null,
+            fullName: fullName.trim(),
+            phone: phone.trim(),
+            email: username
         }];
 
         const newUser = { uid, username, password, isMaster: !!isMaster, accountId, createdAt, memberships };
         await storage.addUser(newUser);
+
+        // Auto join all templates of this account with the new user's name
+        await autoJoinTemplates(accountId, fullName || username, phone);
 
         res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid, memberships });
     } catch (err) {
@@ -95,7 +165,7 @@ app.post('/api/auth/login', async (req, res, next) => {
 });
 
 // Get all users (admin)
-app.get('/api/auth/users', async (req, res) => {
+app.get('/api/auth/users', checkIsKeylet, async (req, res) => {
     try {
         const users = await storage.getUsers();
         // Return all fields including password and isBlocked for master inspection
@@ -106,7 +176,7 @@ app.get('/api/auth/users', async (req, res) => {
 });
 
 // Update user (role and/or block status)
-app.put('/api/auth/users/:uid', async (req, res) => {
+app.put('/api/auth/users/:uid', checkIsKeylet, async (req, res) => {
     const { uid } = req.params;
     const updates = {};
     if (req.body.isMaster !== undefined) updates.isMaster = !!req.body.isMaster;
@@ -120,7 +190,7 @@ app.put('/api/auth/users/:uid', async (req, res) => {
 });
 
 // Delete user
-app.delete('/api/auth/users/:uid', async (req, res) => {
+app.delete('/api/auth/users/:uid', checkIsKeylet, async (req, res) => {
     const { uid } = req.params;
     try {
         await storage.deleteUser(uid);
@@ -163,8 +233,23 @@ app.post('/api/auth/accounts/join', async (req, res) => {
             return res.status(400).json({ error: 'Already a member of this account' });
         }
 
-        memberships.push({ id: accountId, role: 'editor', expiresAt: null });
+        const profile = memberships.find(m => m.fullName) || {};
+        const name = profile.fullName || user.username;
+        const phone = profile.phone || '';
+
+        memberships.push({ 
+            id: accountId, 
+            role: 'editor', 
+            expiresAt: null,
+            fullName: name,
+            phone: phone,
+            email: user.username
+        });
         await storage.updateUser(uid, { memberships });
+
+        // Auto join all templates of this account with the user's name
+        await autoJoinTemplates(accountId, name, phone);
+
         res.json({ success: true, memberships });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
@@ -284,7 +369,7 @@ app.delete('/api/templates/:id', async (req, res) => {
 // ─── MEMBERS ──────────────────────────────────────────────────────────────────
 
 // Get members
-app.get('/api/members', async (req, res) => {
+app.get('/api/members', checkIsKeylet, async (req, res) => {
     const { accountId } = req.query;
     try {
         const members = await storage.getMembers(accountId);
@@ -300,8 +385,13 @@ app.post('/api/members', async (req, res) => {
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, accountId, 'master')) {
-            return res.status(403).json({ error: 'Only Master can add members' });
+        
+        const activeMembership = user?.memberships?.find(m => m.id === accountId);
+        const currentUserFullName = activeMembership?.fullName || user?.username || '';
+        const isSelf = name?.toLowerCase().trim() === currentUserFullName?.toLowerCase().trim();
+
+        if (!isSelf && !checkPermission(user, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master or the member themselves can add this record' });
         }
 
         const id = uuidv4();
@@ -325,8 +415,13 @@ app.put('/api/members/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, member.accountId, 'master')) {
-            return res.status(403).json({ error: 'Only Master can update members' });
+        
+        const activeMembership = user?.memberships?.find(m => m.id === member.accountId);
+        const currentUserFullName = activeMembership?.fullName || user?.username || '';
+        const isSelf = member.name?.toLowerCase().trim() === currentUserFullName?.toLowerCase().trim();
+
+        if (!isSelf && !checkPermission(user, member.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master or the member themselves can update this record' });
         }
 
         await storage.updateMember(id, req.body);
@@ -347,8 +442,13 @@ app.delete('/api/members/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, member.accountId, 'master')) {
-            return res.status(403).json({ error: 'Only Master can delete members' });
+
+        const activeMembership = user?.memberships?.find(m => m.id === member.accountId);
+        const currentUserFullName = activeMembership?.fullName || user?.username || '';
+        const isSelf = member.name?.toLowerCase().trim() === currentUserFullName?.toLowerCase().trim();
+
+        if (!isSelf && !checkPermission(user, member.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master or the member themselves can delete this record' });
         }
 
         await storage.deleteMember(id);
@@ -361,7 +461,7 @@ app.delete('/api/members/:id', async (req, res) => {
 // ─── SERVICES ─────────────────────────────────────────────────────────────────
 
 // Get services
-app.get('/api/services', async (req, res) => {
+app.get('/api/services', checkIsKeylet, async (req, res) => {
     const { accountId } = req.query;
     try {
         const services = await storage.getServices(accountId);

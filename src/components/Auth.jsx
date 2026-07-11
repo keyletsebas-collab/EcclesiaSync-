@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { LogIn, UserPlus, Shield, Sparkles } from 'lucide-react';
-import AdminPanel from './AdminPanel';
 
 const Auth = () => {
     const { login, signup, users, updateUserRole, deleteUser } = useAuth();
@@ -10,14 +9,12 @@ const Auth = () => {
     const [isLogin, setIsLogin] = useState(true);
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
+    const [fullName, setFullName] = useState('');
+    const [phone, setPhone] = useState('');
     const [accountId, setAccountId] = useState(''); // NEW: for joining existing account
-    const [isMaster, setIsMaster] = useState(false);
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
-    const [showAdminPanel, setShowAdminPanel] = useState(false);
-
-    // Secret admin password
-    const ADMIN_PASSWORD = 'superadmin2024';
+    const [loading, setLoading] = useState(false);
 
     const handleSubmit = async (e) => {
         e.preventDefault();
@@ -25,35 +22,38 @@ const Auth = () => {
         setSuccessMessage('');
 
         if (!password.trim()) {
-            setError('Password is required');
-            return;
-        }
-
-        // Check for admin panel access - just password needed
-        if (password === ADMIN_PASSWORD) {
-            setShowAdminPanel(true);
-            setPassword(''); // Clear password for security
-            setUsername('');
+            setError('La contraseña es requerida');
             return;
         }
 
         if (!username.trim()) {
-            setError('Username and password are required');
+            setError('El usuario/correo es requerido');
             return;
         }
 
-        const result = isLogin
-            ? await login(username, password)
-            : await signup(username, password, isMaster, accountId);
+        if (!isLogin && (!fullName.trim() || !phone.trim())) {
+            setError('Todos los campos (Nombre, Correo, Número, Contraseña) son obligatorios para registrarse.');
+            return;
+        }
 
-        if (!result.success) {
-            const msg = result.error === 'Account is blocked'
-                ? '🔒 Tu cuenta ha sido bloqueada. Contacta al administrador.'
-                : result.error;
-            setError(msg);
-        } else if (!isLogin && result.accountId) {
-            // Show account ID briefly after signup
-            setSuccessMessage(`Account created! Your Account ID: ${result.accountId}`);
+        setLoading(true);
+        try {
+            const result = isLogin
+                ? await login(username, password)
+                : await signup(username, password, username.toLowerCase().trim() === 'keylet', accountId, fullName, phone);
+
+            if (!result.success) {
+                const msg = result.error === 'Account is blocked'
+                    ? '🔒 Tu cuenta ha sido bloqueada. Contacta al administrador.'
+                    : result.error;
+                setError(msg);
+            } else if (!isLogin && result.accountId) {
+                setSuccessMessage(`¡Cuenta creada con éxito! ID de tu Iglesia: ${result.accountId}`);
+            }
+        } catch (err) {
+            setError(err.message || 'Error de conexión con el servidor');
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -61,8 +61,9 @@ const Auth = () => {
         setIsLogin(!isLogin);
         setError('');
         setSuccessMessage('');
-        setIsMaster(false);
         setAccountId('');
+        setFullName('');
+        setPhone('');
     };
 
     return (
@@ -93,7 +94,7 @@ const Auth = () => {
                         marginBottom: '0.25rem',
                         fontWeight: 800
                     }}>
-                        LuminaSync
+                        VerbumSync
                     </h1>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>
                         {isLogin ? t('login') : t('signup')}
@@ -101,33 +102,67 @@ const Auth = () => {
                 </div>
 
                 <form onSubmit={handleSubmit}>
-                    <div style={{ marginBottom: '1rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                            {t('username')}
+                    {!isLogin && (
+                        <>
+                            <div className="input-group" style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                                    Nombre Completo *
+                                </label>
+                                <input
+                                    className="glass-input"
+                                    value={fullName}
+                                    onChange={(e) => setFullName(e.target.value)}
+                                    placeholder="Ej: Juan Pérez"
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="input-group" style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                                    Número de Contacto *
+                                </label>
+                                <input
+                                    className="glass-input"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    placeholder="Ej: +1 555-1234"
+                                    required
+                                />
+                            </div>
+                        </>
+                    )}
+
+                    <div className="input-group" style={{ marginBottom: '1rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                            {isLogin ? t('username') : 'Correo Electrónico *'}
                         </label>
                         <input
                             className="glass-input"
                             value={username}
                             onChange={(e) => setUsername(e.target.value)}
-                            autoFocus
+                            placeholder={isLogin ? "Usuario o Correo" : "Ej: correo@ejemplo.com"}
+                            autoFocus={isLogin}
+                            required
                         />
                     </div>
 
-                    <div style={{ marginBottom: '1.5rem' }}>
-                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
-                            {t('password')}
+                    <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                            {t('password')} *
                         </label>
                         <input
                             className="glass-input"
                             type="password"
                             value={password}
                             onChange={(e) => setPassword(e.target.value)}
+                            placeholder="••••••••"
+                            required
                         />
                     </div>
 
                     {!isLogin && (
-                        <div style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>
+                        <div className="input-group" style={{ marginBottom: '1.5rem' }}>
+                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
                                 {t('accountId')} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t('optional')})</span>
                             </label>
                             <input
@@ -143,47 +178,7 @@ const Auth = () => {
                         </div>
                     )}
 
-                    {!isLogin && (
-                        <div style={{
-                            marginBottom: '1.5rem',
-                            padding: '1rem',
-                            background: 'rgba(99, 102, 241, 0.1)',
-                            borderRadius: 'var(--radius)',
-                            border: '1px solid rgba(99, 102, 241, 0.2)'
-                        }}>
-                            <label style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                cursor: 'pointer'
-                            }}>
-                                <input
-                                    type="checkbox"
-                                    checked={isMaster}
-                                    onChange={(e) => setIsMaster(e.target.checked)}
-                                    style={{
-                                        width: '18px',
-                                        height: '18px',
-                                        cursor: 'pointer'
-                                    }}
-                                />
-                                <div style={{ flex: 1 }}>
-                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                        <Shield size={16} color="var(--primary)" />
-                                        <span style={{ fontWeight: 500 }}>{t('createMasterAccount')}</span>
-                                    </div>
-                                    <p style={{
-                                        fontSize: '0.75rem',
-                                        color: 'var(--text-muted)',
-                                        marginTop: '0.25rem',
-                                        marginLeft: '1.5rem'
-                                    }}>
-                                        {t('masterAccountHint')}
-                                    </p>
-                                </div>
-                            </label>
-                        </div>
-                    )}
+
 
                     {successMessage && (
                         <div style={{
@@ -215,8 +210,15 @@ const Auth = () => {
                         </div>
                     )}
 
-                    <button type="submit" className="btn btn-primary" style={{ width: '100%', justifyContent: 'center' }}>
-                        {isLogin ? t('loginButton') : t('signupButton')}
+                    <button 
+                        type="submit" 
+                        className="btn btn-primary" 
+                        style={{ width: '100%', justifyContent: 'center' }}
+                        disabled={loading}
+                    >
+                        {loading 
+                            ? (isLogin ? 'Iniciando sesión...' : 'Creando cuenta...') 
+                            : (isLogin ? t('loginButton') : t('signupButton'))}
                     </button>
                 </form>
 
@@ -244,17 +246,9 @@ const Auth = () => {
                     </button>
                 </div>
             </div>
-
-            {/* Admin Panel */}
-            <AdminPanel
-                isOpen={showAdminPanel}
-                onClose={() => setShowAdminPanel(false)}
-                allUsers={users}
-                onUpdateUser={updateUserRole}
-                onDeleteUser={deleteUser}
-            />
         </div>
     );
 };
+
 
 export default Auth;

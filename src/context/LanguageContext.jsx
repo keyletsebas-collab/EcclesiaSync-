@@ -8,7 +8,7 @@ export const useLanguage = () => {
 };
 
 export const LanguageProvider = ({ children }) => {
-    const appName = 'LuminaSync'; // Define appName here
+    const appName = 'VerbumSync'; // Define appName here
     const [currentLanguage, setCurrentLanguage] = useState(() => {
         const saved = localStorage.getItem(`${appName}_language`); // Use appName in the key
         return saved || 'en';

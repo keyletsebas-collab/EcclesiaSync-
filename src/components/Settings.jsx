@@ -8,7 +8,7 @@ import {
     Eye, EyeOff, Lock, Unlock, Trash2, Users, RefreshCw
 } from 'lucide-react';
 
-const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
+const Settings = ({ isOpen, onClose }) => {
     const { 
         currentUser, logout, users, fetchUsers, 
         toggleBlockUser, deleteUser, joinAccount, updateMembershipRole 
@@ -211,20 +211,7 @@ const Settings = ({ isOpen, onClose, onInstallApp, canInstall }) => {
                 </div>
             )}
 
-            {/* PWA Download */}
-            {canInstall && (
-                <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'linear-gradient(135deg, rgba(99,102,241,0.1) 0%, rgba(168,85,247,0.1) 100%)', borderRadius: 'var(--radius)', border: '1px solid var(--primary-glow)' }}>
-                    <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
-                        <Download size={16} />{t('installApp')}
-                    </h4>
-                    <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
-                        Accede más rápido instalando LuminaSync en tu dispositivo.
-                    </p>
-                    <button onClick={onInstallApp} className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', fontSize: '0.875rem' }}>
-                        {t('installButton')}
-                    </button>
-                </div>
-            )}
+
 
             {/* About */}
             <div style={{ marginBottom: '2rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>

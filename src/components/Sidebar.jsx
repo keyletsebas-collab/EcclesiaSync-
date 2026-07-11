@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check } from 'lucide-react';
+import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check, Shield } from 'lucide-react';
 import Settings from './Settings';
 
-const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstallApp, canInstall }) => {
+const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory }) => {
     const { templates } = useStorage();
-    const { currentUser, activeAccountId, setActiveAccountId, canEdit } = useAuth();
+    const { currentUser, activeAccountId, setActiveAccountId, canEdit, users, updateUserRole, deleteUser } = useAuth();
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isIdCopied, setIsIdCopied] = useState(false);
@@ -42,7 +42,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                         WebkitBackgroundClip: 'text',
                         WebkitTextFillColor: 'transparent'
                     }}>
-                        LuminaSync
+                        VerbumSync
                     </span>
                 </div>
 
@@ -56,7 +56,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                             value={activeAccountId} 
                             onChange={(e) => setActiveAccountId(e.target.value)}
                             className="glass-input"
-                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem', background: 'var(--bg-glass)' }}
+                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
                         >
                             {currentUser?.memberships?.map(m => (
                                 <option key={m.id} value={m.id}>{m.id} ({m.role})</option>
@@ -145,7 +145,55 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
                     </div>
                 </div>
 
-                <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border)' }}>
+                <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {templates.length > 0 && currentUser?.username?.toLowerCase() === 'keylet' && (
+                        <button
+                            onClick={onSelectHistory}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '10px',
+                                border: activeView === 'history' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: activeView === 'history' ? 'var(--primary-glow)' : 'var(--bg-glass)',
+                                color: activeView === 'history' ? '#fff' : 'var(--text-main)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                width: '100%',
+                                fontSize: '0.875rem',
+                                fontWeight: 500
+                            }}
+                            className="sidebar-item"
+                        >
+                            <FileText size={18} opacity={activeView === 'history' ? 1 : 0.6} />
+                            Historia
+                        </button>
+                    )}
+                    {currentUser?.username?.toLowerCase() === 'keylet' && (
+                        <button
+                            onClick={onSelectAdmins}
+                            style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '0.75rem',
+                                padding: '0.75rem 1rem',
+                                borderRadius: '10px',
+                                border: activeView === 'admins' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: activeView === 'admins' ? 'var(--primary-glow)' : 'var(--bg-glass)',
+                                color: activeView === 'admins' ? '#fff' : 'var(--text-main)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s',
+                                width: '100%',
+                                fontSize: '0.875rem',
+                                fontWeight: 500
+                            }}
+                            className="sidebar-item"
+                        >
+                            <Shield size={18} opacity={activeView === 'admins' ? 1 : 0.6} />
+                            Admins
+                        </button>
+                    )}
                     <button
                         onClick={() => setIsSettingsOpen(true)}
                         style={{
@@ -173,9 +221,9 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, onInstal
             <Settings
                 isOpen={isSettingsOpen}
                 onClose={() => setIsSettingsOpen(false)}
-                onInstallApp={onInstallApp}
-                canInstall={canInstall}
             />
+
+
 
             <style>{`
                 .sidebar-item:hover {

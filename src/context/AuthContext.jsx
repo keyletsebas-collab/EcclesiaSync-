@@ -2,7 +2,30 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
-const API_URL = '';
+const getApiUrl = () => {
+    if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
+
+    // If it's a web host (Vercel, etc.)
+    if (window.location.hostname && 
+        window.location.hostname !== 'localhost' && 
+        window.location.hostname !== '127.0.0.1' && 
+        window.location.hostname !== '10.0.2.2' &&
+        !window.location.protocol.startsWith('file')) {
+        return window.location.origin;
+    }
+
+    // Android WebView check
+    if (window.navigator && /Android/i.test(window.navigator.userAgent)) {
+        if (window.location.hostname === '10.0.2.2') {
+            return 'http://10.0.2.2:3001';
+        }
+        return 'http://127.0.0.1:3001';
+    }
+
+    return 'http://127.0.0.1:3001';
+};
+
+const API_URL = getApiUrl();
 
 export const useAuth = () => {
     return useContext(AuthContext);
@@ -57,9 +80,12 @@ export const AuthProvider = ({ children }) => {
     }, [currentUser, activeAccountId]);
 
     const fetchUsers = async () => {
-        if (!currentUser?.isMaster) return;
         try {
-            const response = await fetch(`${API_URL}/api/auth/users`);
+            const response = await fetch(`${API_URL}/api/auth/users`, {
+                headers: {
+                    'X-User-Uid': currentUser?.uid || ''
+                }
+            });
             const data = await response.json();
             if (Array.isArray(data)) {
                 setUsers(data);
@@ -69,12 +95,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signup = async (email, password, isMaster = false, accountId = null) => {
+    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '') => {
         try {
             const response = await fetch(`${API_URL}/api/auth/signup`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email, password, isMaster, accountId })
+                body: JSON.stringify({ username: email, password, isMaster, accountId, fullName, phone, email })
             });
             const data = await response.json();
             if (data.success) {
@@ -134,7 +160,10 @@ export const AuthProvider = ({ children }) => {
         try {
             await fetch(`${API_URL}/api/auth/users/${uid}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Uid': currentUser?.uid || ''
+                },
                 body: JSON.stringify(updates)
             });
             await fetchUsers();
@@ -147,7 +176,10 @@ export const AuthProvider = ({ children }) => {
         try {
             await fetch(`${API_URL}/api/auth/users/${uid}`, {
                 method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Uid': currentUser?.uid || ''
+                },
                 body: JSON.stringify({ isBlocked })
             });
             await fetchUsers();
@@ -159,7 +191,10 @@ export const AuthProvider = ({ children }) => {
     const deleteUser = async (uid) => {
         try {
             await fetch(`${API_URL}/api/auth/users/${uid}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: {
+                    'X-User-Uid': currentUser?.uid || ''
+                }
             });
             await fetchUsers();
         } catch (err) {
@@ -193,7 +228,10 @@ export const AuthProvider = ({ children }) => {
         try {
             const res = await fetch(`${API_URL}/api/auth/accounts/role`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Uid': currentUser?.uid || ''
+                },
                 body: JSON.stringify({ 
                     masterUid: currentUser.uid, 
                     targetUid, 
@@ -212,7 +250,7 @@ export const AuthProvider = ({ children }) => {
         if (!currentUser) return false;
         if (currentUser.isMaster) return true;
         const membership = currentUser.memberships?.find(m => m.id === activeAccountId);
-        return membership?.role === 'master';
+        return membership?.role === 'master' || membership?.role === 'editor';
     };
 
     const value = {

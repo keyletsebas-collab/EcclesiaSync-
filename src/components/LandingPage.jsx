@@ -37,7 +37,7 @@ const LandingPage = ({ onEnter }) => {
                         <Sparkles size={20} color="white" />
                     </div>
                     <span style={{ fontWeight: 800, fontSize: '1.5rem', letterSpacing: '-1px' }}>
-                        LuminaSync
+                        VerbumSync
                     </span>
                 </div>
                 <button
@@ -247,7 +247,7 @@ const LandingPage = ({ onEnter }) => {
                 color: 'var(--text-muted)',
                 fontSize: '0.875rem'
             }}>
-                <p>&copy; 2024 LuminaSync. {t('footerNote')}</p>
+                <p>&copy; 2024 VerbumSync. {t('footerNote')}</p>
             </footer>
 
             <style>{`

@@ -1,7 +1,7 @@
 export const translations = {
     en: {
         // App
-        appName: 'LuminaSync',
+        appName: 'VerbumSync',
 
         // Auth
         login: 'Login',
@@ -27,7 +27,7 @@ export const translations = {
         manageMembers: 'Manage Team',
 
         // Welcome
-        welcomeTitle: 'Welcome to LuminaSync',
+        welcomeTitle: 'Welcome to VerbumSync',
         welcomeMessage: 'Select a template from the sidebar to manage members,\nor create a new template to get started.',
         createFirstTemplate: 'Create Your First Template',
 
@@ -126,10 +126,10 @@ export const translations = {
         featureAutoTitle: 'Automatic Startup',
         featureAutoDesc: 'No complex setups every time you turn on your workstation.',
         ctaTitle: 'Ready to take your church to the next level?',
-        ctaButton: 'Access LuminaSync',
-        footerNote: 'A premium solution for Adventist church management.',
-        aboutTitle: 'About LuminaSync',
-        aboutBio: 'LuminaSync was born from the vision of uniting faith with technological excellence. Designed to modernize church administration, our platform enables total and collaborative synchronization across all ministries. It is a tool created so that every servant can focus on what matters most: the mission, while technology handles the workflow and order.',
+        ctaButton: 'Access VerbumSync',
+        footerNote: 'A premium solution for church management and literary preservation.',
+        aboutTitle: 'About VerbumSync',
+        aboutBio: 'VerbumSync was born from the vision of uniting church administration and literary preservation with cutting-edge technological excellence. Designed to seamlessly centralize deacon records, coordinate interactive real-time prayer requests, and safeguard the ecclesiastical poetry library through smart AI-powered OCR digitization, it enables robust bi-directional synchronization between the cloud and local storage. It is a tool created so that every servant can focus on what matters most: fellowship and the mission, while technology handles their ministerial schedules, order, and multimedia with fluidity.',
         installApp: 'Download App (PWA)',
         installButton: 'Install App',
         watchTrailer: 'Watch Trailer',
@@ -137,7 +137,7 @@ export const translations = {
     },
     es: {
         // App
-        appName: 'LuminaSync',
+        appName: 'VerbumSync',
 
         // Auth
         login: 'Iniciar Sesión',
@@ -163,7 +163,7 @@ export const translations = {
         manageMembers: 'Gestionar Equipo',
 
         // Welcome
-        welcomeTitle: 'Bienvenido a LuminaSync',
+        welcomeTitle: 'Bienvenido a VerbumSync',
         welcomeMessage: 'Selecciona una plantilla de la barra lateral para gestionar miembros,\no crea una nueva plantilla para comenzar.',
         createFirstTemplate: 'Crea Tu Primera Plantilla',
 
@@ -259,10 +259,10 @@ export const translations = {
         featureAutoTitle: 'Inicio Automático',
         featureAutoDesc: 'Sin configuraciones complejas cada vez que encienda su equipo de trabajo.',
         ctaTitle: '¿Listo para llevar su iglesia al siguiente nivel?',
-        ctaButton: 'Acceder a LuminaSync',
-        footerNote: 'Una solución premium para la gestión eclesiástica adventista.',
-        aboutTitle: 'Acerca de LuminaSync',
-        aboutBio: 'LuminaSync nace de la visión de unir la fe con la excelencia tecnológica. Diseñada para modernizar la administración eclesiástica, nuestra plataforma permite una sincronización total y colaborativa entre todos los ministerios. Es una herramienta creada para que cada servidor pueda enfocarse en lo más importante: la misión, mientras la tecnología se encarga de la fluidez y el orden.',
+        ctaButton: 'Acceder a VerbumSync',
+        footerNote: 'Una solución premium para la gestión eclesiástica y preservación literaria.',
+        aboutTitle: 'Acerca de VerbumSync',
+        aboutBio: 'VerbumSync nace de la visión de unificar la administración de la iglesia y la preservación literaria con excelencia tecnológica de vanguardia. Diseñado para centralizar de forma fluida el registro de diáconos, coordinar peticiones de oración interactivas en tiempo real y resguardar la biblioteca poética eclesiástica mediante digitalización inteligente (OCR con IA), permite una sincronización bidireccional y robusta entre la nube y el almacenamiento local. Es una herramienta creada para que cada servidor pueda enfocarse en lo más importante: la comunión y la misión, mientras la tecnología organiza con fluidez, orden y multimedia sus salidas ministeriales.',
         installApp: 'Descargar App (PWA)',
         installButton: 'Instalar Aplicación',
         watchTrailer: 'Ver Tráiler',
