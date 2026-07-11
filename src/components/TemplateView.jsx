@@ -212,7 +212,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
             </header>
 
             {isAlreadyMember ? (
-                currentUser?.username?.toLowerCase() === 'keylet' ? (
+                currentUser?.username?.toLowerCase() === 'keylet' || isSonido ? (
                     <>
                         {/* Tabs Navigation */}
             <div style={{
@@ -1049,7 +1049,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                     );
                 })()
             ) : (
-                <ServicesView templateId={templateId} members={templateMembers} isPoetry={isPoetry} />
+                <ServicesView templateId={templateId} members={templateMembers} isPoetry={isPoetry} isSonido={isSonido} />
             )}
                     </>
                 ) : (

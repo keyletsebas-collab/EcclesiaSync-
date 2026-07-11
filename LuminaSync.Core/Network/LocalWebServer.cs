@@ -338,9 +338,9 @@ namespace LuminaSync.Core.Network
                 // --- MEMBERS ---
                 else if (path == "/api/members" && method == "GET")
                 {
-                    if (await ValidateIsKeyletAsync(req, res))
+                    var accountId = req.QueryString["accountId"] ?? "";
+                    if (await CheckIfSonidoAsync(accountId) || await ValidateIsKeyletAsync(req, res))
                     {
-                        var accountId = req.QueryString["accountId"] ?? "";
                         var all = await _db.GetItemsAsync<Member>();
                         var filtered = all.FindAll(m => m.AccountId == accountId);
                         responseBody = JsonConvert.SerializeObject(filtered);
@@ -378,9 +378,9 @@ namespace LuminaSync.Core.Network
                 // --- SERVICES ---
                 else if (path == "/api/services" && method == "GET")
                 {
-                    if (await ValidateIsKeyletAsync(req, res))
+                    var accountId = req.QueryString["accountId"] ?? "";
+                    if (await CheckIfSonidoAsync(accountId) || await ValidateIsKeyletAsync(req, res))
                     {
-                        var accountId = req.QueryString["accountId"] ?? "";
                         var all = await _db.GetItemsAsync<Service>();
                         var filtered = all.FindAll(s => s.AccountId == accountId);
                         responseBody = JsonConvert.SerializeObject(filtered);
@@ -451,6 +451,14 @@ namespace LuminaSync.Core.Network
             }
 
             return true;
+        }
+
+        private async Task<bool> CheckIfSonidoAsync(string accountId)
+        {
+            if (string.IsNullOrEmpty(accountId)) return false;
+            var templates = await _db.GetItemsAsync<Template>();
+            var accountTemplates = templates.FindAll(t => t.AccountId == accountId);
+            return accountTemplates.Exists(t => t.CustomFields.Contains("__sonido__"));
         }
 
         private async Task _localDbSaveAndSupabaseUpsert(User user)

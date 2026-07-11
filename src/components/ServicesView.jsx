@@ -5,9 +5,10 @@ import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Trash2, UserPlus, Flame, Upload, FileImage, Film, Eye } from 'lucide-react';
 import AssignServiceModal from './AssignServiceModal';
 
-const ServicesView = ({ templateId, members, isPoetry }) => {
+const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
     const { services, addService, deleteService, updateService } = useStorage();
     const { currentUser, canEdit } = useAuth();
+    const hasEditPermission = canEdit || isSonido;
     const { t } = useLanguage();
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
     const [fullScreenMedia, setFullScreenMedia] = useState(null);
@@ -121,7 +122,7 @@ const ServicesView = ({ templateId, members, isPoetry }) => {
                     </p>
                 </div>
 
-                {canEdit && (
+                {hasEditPermission && (
                     <button
                         className="btn btn-primary"
                         onClick={() => setIsAssignModalOpen(true)}
@@ -284,7 +285,7 @@ const ServicesView = ({ templateId, members, isPoetry }) => {
                                                         )}
                                                     </div>
 
-                                                    {canEdit && (
+                                                    {hasEditPermission && (
                                                         <button
                                                             className="btn-danger"
                                                             style={{
@@ -335,7 +336,7 @@ const ServicesView = ({ templateId, members, isPoetry }) => {
                                                                         ) : (
                                                                             <img src={item.data} alt={item.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                                                         )}
-                                                                        {canEdit && (
+                                                                        {hasEditPermission && (
                                                                             <button
                                                                                 onClick={(e) => {
                                                                                     e.stopPropagation();
@@ -369,7 +370,7 @@ const ServicesView = ({ templateId, members, isPoetry }) => {
                                                         )}
 
                                                         {/* Action to Upload */}
-                                                        {canEdit && (
+                                                        {hasEditPermission && (
                                                             <label style={{
                                                                 display: 'inline-flex',
                                                                 alignItems: 'center',

@@ -68,9 +68,33 @@ async function autoJoinTemplates(accountId, name, phone) {
     }
 }
 
+async function checkIfSonido(templateId, accountId) {
+    try {
+        const templates = await storage.getTemplates();
+        if (templateId) {
+            const template = templates.find(t => t.id === templateId);
+            return !!template?.customFields?.includes('__sonido__');
+        }
+        if (accountId) {
+            const accountTemplates = templates.filter(t => t.accountId === accountId);
+            return accountTemplates.some(t => t.customFields?.includes('__sonido__'));
+        }
+    } catch (e) {
+        console.error('checkIfSonido error:', e);
+    }
+    return false;
+}
+
 // Middleware to verify if the requester is the main admin 'keylet'
 async function checkIsKeylet(req, res, next) {
     const userUid = req.headers['x-user-uid'] || req.query.uid || req.body.uid;
+    const accountId = req.query.accountId || req.body.accountId;
+    const templateId = req.query.templateId || req.body.templateId;
+
+    if (await checkIfSonido(templateId, accountId)) {
+        return next();
+    }
+
     if (!userUid) {
         return res.status(401).json({ error: 'Unauthorized: Missing User ID' });
     }
@@ -477,7 +501,8 @@ app.post('/api/services', async (req, res) => {
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, accountId, 'master')) {
+        const isSonido = await checkIfSonido(templateId, accountId);
+        if (!isSonido && !checkPermission(user, accountId, 'master')) {
             return res.status(403).json({ error: 'Only Master can assign services' });
         }
 
@@ -502,7 +527,8 @@ app.put('/api/services/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, service.accountId, 'master')) {
+        const isSonido = await checkIfSonido(service.templateId, service.accountId);
+        if (!isSonido && !checkPermission(user, service.accountId, 'master')) {
             return res.status(403).json({ error: 'Only Master can update services' });
         }
 
@@ -524,7 +550,8 @@ app.delete('/api/services/:id', async (req, res) => {
 
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
-        if (!checkPermission(user, service.accountId, 'master')) {
+        const isSonido = await checkIfSonido(service.templateId, service.accountId);
+        if (!isSonido && !checkPermission(user, service.accountId, 'master')) {
             return res.status(403).json({ error: 'Only Master can delete services' });
         }
 
