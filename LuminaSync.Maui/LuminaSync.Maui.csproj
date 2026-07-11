@@ -55,7 +55,7 @@
       <ProjectReference Include="..\LuminaSync.Core\LuminaSync.Core.csproj" />
     </ItemGroup>
 
-    <Target Name="CopyReactDist" BeforeTargets="BeforeBuild">
+    <Target Name="CopyReactDist" BeforeTargets="BeforeBuild;ResolveMauiAssets">
         <Message Importance="high" Text="Copying React dist files to MAUI Raw assets..." />
         <ItemGroup>
             <ReactDistFiles Include="$(MSBuildProjectDirectory)\..\dist\**\*.*" />
@@ -64,6 +64,9 @@
         <Copy SourceFiles="@(ReactDistFiles)" 
               DestinationFiles="@(ReactDistFiles->'$(MSBuildProjectDirectory)\Resources\Raw\%(RecursiveDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true" />
+        <ItemGroup>
+            <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        </ItemGroup>
     </Target>
 
 </Project>
