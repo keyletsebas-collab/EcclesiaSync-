@@ -7,7 +7,7 @@ namespace LuminaSync.Core.Models
 {
     [SQLite.Table("services")]
     [Postgrest.Attributes.Table("services")]
-    public class Service : BaseModel
+    public class Service : SupabaseLocalModel
     {
         [SQLite.PrimaryKey]
         [Postgrest.Attributes.PrimaryKey("id", false)]

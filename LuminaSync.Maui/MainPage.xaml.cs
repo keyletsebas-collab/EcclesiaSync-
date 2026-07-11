@@ -27,7 +27,7 @@ namespace LuminaSync.Maui
             if (!_isInitialized)
             {
                 _isInitialized = true;
-                InitializeApp();
+                await InitializeAppAsync();
 
                 try
                 {
@@ -49,7 +49,7 @@ namespace LuminaSync.Maui
             }
         }
 
-        private void InitializeApp()
+        private async Task InitializeAppAsync()
         {
             try
             {
@@ -65,19 +65,10 @@ namespace LuminaSync.Maui
                 string supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY") ?? "placeholder-key";
 
                 _sync = new SyncEngine(_db, supabaseUrl, supabaseKey);
-                
-                Task.Run(async () =>
-                {
-                    try
-                    {
-                        await _db.InitializeAsync();
-                        await _sync.InitializeAsync();
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[App] Initialization failed: {ex.Message}");
-                    }
-                });
+
+                // Await initialization of tables and data sync before starting server
+                await _db.InitializeAsync();
+                await _sync.InitializeAsync();
 
                 // 4. Start local Web Server
                 _server = new LocalWebServer(_db, _sync);

@@ -7,7 +7,7 @@ namespace LuminaSync.Core.Models
 {
     [SQLite.Table("users")]
     [Postgrest.Attributes.Table("users")]
-    public class User : BaseModel
+    public class User : SupabaseLocalModel
     {
         [SQLite.PrimaryKey]
         [Postgrest.Attributes.PrimaryKey("uid", false)]
