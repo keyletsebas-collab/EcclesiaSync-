@@ -43,6 +43,16 @@ namespace LuminaSync.Core.Data
 
         private async Task SetupRealtimeSubscriptionsAsync()
         {
+            try
+            {
+                await _supabaseClient.Realtime.ConnectAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[SyncEngine] Realtime connection failed: {ex.Message}");
+                return;
+            }
+
             var tables = new[] { "templates", "members", "services" };
             foreach (var table in tables)
             {
