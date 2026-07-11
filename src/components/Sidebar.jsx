@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check, Shield } from 'lucide-react';
+import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check, Shield, X } from 'lucide-react';
 import Settings from './Settings';
 
-const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory }) => {
+const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose }) => {
     const { templates } = useStorage();
     const { currentUser, activeAccountId, setActiveAccountId, canEdit, users, updateUserRole, deleteUser } = useAuth();
     const { t } = useLanguage();
@@ -21,29 +21,46 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
 
     return (
         <>
-            <aside className="sidebar">
-                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
-                    <div style={{
-                        background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                        padding: '0.6rem',
-                        borderRadius: '12px',
-                        boxShadow: '0 8px 16px var(--primary-glow)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center'
-                    }}>
-                        <Sparkles size={20} color="white" />
+            <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                        <div style={{
+                            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
+                            padding: '0.6rem',
+                            borderRadius: '12px',
+                            boxShadow: '0 8px 16px var(--primary-glow)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                        }}>
+                            <Sparkles size={20} color="white" />
+                        </div>
+                        <span style={{ 
+                            fontWeight: 800, 
+                            fontSize: '1.5rem', 
+                            letterSpacing: '-1px',
+                            background: 'linear-gradient(to right, #fff, var(--text-muted))',
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent'
+                        }}>
+                            VerbumSync
+                        </span>
                     </div>
-                    <span style={{ 
-                        fontWeight: 800, 
-                        fontSize: '1.5rem', 
-                        letterSpacing: '-1px',
-                        background: 'linear-gradient(to right, #fff, var(--text-muted))',
-                        WebkitBackgroundClip: 'text',
-                        WebkitTextFillColor: 'transparent'
-                    }}>
-                        VerbumSync
-                    </span>
+                    {/* Mobile Close Button */}
+                    <button 
+                        onClick={onClose} 
+                        className="mobile-close-btn" 
+                        style={{
+                            background: 'none',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '0.5rem',
+                            display: 'none'
+                        }}
+                    >
+                        <X size={20} />
+                    </button>
                 </div>
 
                 {/* Account Switcher */}

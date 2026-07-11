@@ -4,7 +4,7 @@ import Auth from './components/Auth';
 import { useStorage } from './context/StorageContext';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
-import { Plus, Sparkles } from 'lucide-react';
+import { Plus, Sparkles, Menu } from 'lucide-react';
 import Modal from './components/Modal';
 import LandingPage from './components/LandingPage';
 import TemplateView from './components/TemplateView';
@@ -20,6 +20,7 @@ function App() {
   const [activeView, setActiveView] = useState('templates'); // 'templates' or 'admins'
   const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
 
   // New Template Form State
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -82,6 +83,24 @@ function App() {
         <div className="blob"></div>
         <div className="blob"></div>
       </div>
+
+      {/* Mobile Top Header */}
+      <header className="mobile-header">
+        <button onClick={() => setIsMobileSidebarOpen(true)} className="mobile-menu-btn">
+          <Menu size={24} />
+        </button>
+        <span className="mobile-logo">VerbumSync</span>
+        <div style={{ width: 24 }}></div> {/* spacer */}
+      </header>
+
+      {/* Sidebar Backdrop on Mobile */}
+      {isMobileSidebarOpen && (
+        <div 
+          className="sidebar-backdrop" 
+          onClick={() => setIsMobileSidebarOpen(false)}
+        />
+      )}
+
       {/* Version Indicator */}
       <div style={{
         position: 'fixed',
@@ -107,17 +126,25 @@ function App() {
         onSelectTemplate={(id) => {
           setActiveTemplateId(id);
           setActiveView('templates');
+          setIsMobileSidebarOpen(false);
         }}
-        onOpenNewTemplate={() => setIsNewTemplateModalOpen(true)}
+        onOpenNewTemplate={() => {
+          setIsNewTemplateModalOpen(true);
+          setIsMobileSidebarOpen(false);
+        }}
         activeView={activeView}
         onSelectAdmins={() => {
           setActiveTemplateId(null);
           setActiveView('admins');
+          setIsMobileSidebarOpen(false);
         }}
         onSelectHistory={() => {
           setActiveTemplateId(null);
           setActiveView('history');
+          setIsMobileSidebarOpen(false);
         }}
+        isOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
       />
 
       <main className="main-content">
@@ -132,16 +159,22 @@ function App() {
             onSelectTemplate={(id) => {
               setActiveTemplateId(id);
               setActiveView('templates');
+              setIsMobileSidebarOpen(false);
             }}
             onSelectAdmins={() => {
               setActiveTemplateId(null);
               setActiveView('admins');
+              setIsMobileSidebarOpen(false);
             }}
             onSelectHistory={() => {
               setActiveTemplateId(null);
               setActiveView('history');
+              setIsMobileSidebarOpen(false);
             }}
-            onOpenNewTemplate={() => setIsNewTemplateModalOpen(true)}
+            onOpenNewTemplate={() => {
+              setIsNewTemplateModalOpen(true);
+              setIsMobileSidebarOpen(false);
+            }}
           />
         )}
       </main>
