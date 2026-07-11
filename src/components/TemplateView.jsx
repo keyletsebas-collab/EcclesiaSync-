@@ -19,6 +19,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
     const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
 
     const isPoetry = template?.customFields?.includes('__poetry__');
+    const isSonido = template?.customFields?.includes('__sonido__');
     const isAlreadyMember = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName?.toLowerCase().trim());
 
     if (!template) {
@@ -236,7 +237,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                 >
                     {isPoetry ? '📖 Biblioteca de Poemas' : t('members')}
                 </button>
-                {!isPoetry && (
+                {!isPoetry && !isSonido && (
                     <button
                         onClick={() => setActiveTab('families')}
                         style={{
@@ -537,7 +538,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                     <th>{t('name')}</th>
                                     <th>{t('idNumber')}</th>
                                     <th>{t('phone')}</th>
-                                    <th>Familia</th>
+                                    {!isSonido && <th>Familia</th>}
                                     {template.customFields.map(field => (
                                         <th key={field}>{field}</th>
                                     ))}
@@ -547,7 +548,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             <tbody>
                                 {filteredMembers.length === 0 ? (
                                     <tr>
-                                        <td colSpan={5 + template.customFields.length} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
+                                        <td colSpan={(isSonido ? 4 : 5) + template.customFields.length} style={{ textAlign: 'center', padding: '3rem', color: 'var(--text-muted)' }}>
                                             {t('noMembersFound')}
                                         </td>
                                     </tr>
@@ -636,28 +637,30 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                             </div>
                                         </td>
                                         <td>{member.phone}</td>
-                                        <td>
-                                            {member.identifications?.familyName ? (
-                                                <span style={{
-                                                    background: 'rgba(99, 102, 241, 0.12)',
-                                                    border: '1px solid var(--border)',
-                                                    padding: '0.2rem 0.5rem',
-                                                    borderRadius: '6px',
-                                                    fontSize: '0.8rem',
-                                                    color: '#a5b4fc',
-                                                    display: 'inline-flex',
-                                                    alignItems: 'center',
-                                                    gap: '0.35rem'
-                                                }}>
-                                                    👨‍👩‍👧‍👦 {member.identifications.familyName} 
-                                                    <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>
-                                                        ({member.identifications.familyRole || 'Familiar'})
+                                        {!isSonido && (
+                                            <td>
+                                                {member.identifications?.familyName ? (
+                                                    <span style={{
+                                                        background: 'rgba(99, 102, 241, 0.12)',
+                                                        border: '1px solid var(--border)',
+                                                        padding: '0.2rem 0.5rem',
+                                                        borderRadius: '6px',
+                                                        fontSize: '0.8rem',
+                                                        color: '#a5b4fc',
+                                                        display: 'inline-flex',
+                                                        alignItems: 'center',
+                                                        gap: '0.35rem'
+                                                    }}>
+                                                        👨‍👩‍👧‍👦 {member.identifications.familyName} 
+                                                        <span style={{ fontSize: '0.7rem', opacity: 0.7 }}>
+                                                            ({member.identifications.familyRole || 'Familiar'})
+                                                        </span>
                                                     </span>
-                                                </span>
-                                            ) : (
-                                                <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>Sin familia</span>
-                                            )}
-                                        </td>
+                                                ) : (
+                                                    <span style={{ color: 'var(--text-muted)', fontSize: '0.8rem', fontStyle: 'italic' }}>Sin familia</span>
+                                                )}
+                                            </td>
+                                        )}
                                         {template.customFields.map(field => (
                                             <td key={field}>{member.identifications[field] || '-'}</td>
                                         ))}
@@ -1124,12 +1127,14 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             
                             const identifications = isPoetry 
                                 ? { isParticipant: true }
-                                : {
-                                    familyRole: '',
-                                    familyName: '',
-                                    hasKey: false,
-                                    needsPrayer: false
-                                };
+                                : isSonido
+                                    ? { hasKey: false }
+                                    : {
+                                        familyRole: '',
+                                        familyName: '',
+                                        hasKey: false,
+                                        needsPrayer: false
+                                    };
                             
                             await addMember(templateId, {
                                 name: currentUserFullName,
@@ -1302,41 +1307,43 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         </div>
 
                         {/* Family Fields */}
-                        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                            <h4 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>👨‍👩‍👧‍👦 Datos de Familia (Opcional)</h4>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                                <div className="input-group">
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Nombre de la Familia (ej. Pérez)</label>
-                                    <input
-                                        className="glass-input"
-                                        placeholder="Apellido(s) de la familia"
-                                        value={newMember.identifications?.familyName || ''}
-                                        onChange={e => setNewMember({
-                                            ...newMember,
-                                            identifications: { ...(newMember.identifications || {}), familyName: e.target.value }
-                                        })}
-                                    />
-                                </div>
-                                <div className="input-group">
-                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Rol en la Familia</label>
-                                    <select
-                                        className="glass-input"
-                                        value={newMember.identifications?.familyRole || ''}
-                                        onChange={e => setNewMember({
-                                            ...newMember,
-                                            identifications: { ...(newMember.identifications || {}), familyRole: e.target.value }
-                                        })}
-                                    >
-                                        <option value="">-- Seleccionar rol --</option>
-                                        <option value="Jefe de familia">👑 Jefe de familia</option>
-                                        <option value="Cónyuge">Cónyuge</option>
-                                        <option value="Hijo/a">Hijo/a</option>
-                                        <option value="Pariente">Pariente</option>
-                                        <option value="Otro">Otro</option>
-                                    </select>
+                        {!isSonido && (
+                            <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                                <h4 style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>👨‍👩‍👧‍👦 Datos de Familia (Opcional)</h4>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
+                                    <div className="input-group">
+                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Nombre de la Familia (ej. Pérez)</label>
+                                        <input
+                                            className="glass-input"
+                                            placeholder="Apellido(s) de la familia"
+                                            value={newMember.identifications?.familyName || ''}
+                                            onChange={e => setNewMember({
+                                                ...newMember,
+                                                identifications: { ...(newMember.identifications || {}), familyName: e.target.value }
+                                            })}
+                                        />
+                                    </div>
+                                    <div className="input-group">
+                                        <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Rol en la Familia</label>
+                                        <select
+                                            className="glass-input"
+                                            value={newMember.identifications?.familyRole || ''}
+                                            onChange={e => setNewMember({
+                                                ...newMember,
+                                                identifications: { ...(newMember.identifications || {}), familyRole: e.target.value }
+                                            })}
+                                        >
+                                            <option value="">-- Seleccionar rol --</option>
+                                            <option value="Jefe de familia">👑 Jefe de familia</option>
+                                            <option value="Cónyuge">Cónyuge</option>
+                                            <option value="Hijo/a">Hijo/a</option>
+                                            <option value="Pariente">Pariente</option>
+                                            <option value="Otro">Otro</option>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
-                        </div>
+                        )}
 
                         {/* Custom Fields */}
                         {template.customFields.length > 0 && (

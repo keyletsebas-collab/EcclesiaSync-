@@ -47,6 +47,8 @@ function App() {
     let fields = [];
     if (newTemplateType === 'poesia') {
       fields = ['__poetry__'];
+    } else if (newTemplateType === 'sonido') {
+      fields = ['__sonido__'];
     } else {
       fields = newTemplateFields.filter(f => f.trim() !== '');
     }
@@ -160,6 +162,7 @@ function App() {
             >
               <option value="diaconos">🏛️ Diáconos (Estándar)</option>
               <option value="poesia">📖 Poesía (Biblioteca y Digitalización)</option>
+              <option value="sonido">🔊 Sonido (Miembros y Servicios)</option>
             </select>
           </div>
 
