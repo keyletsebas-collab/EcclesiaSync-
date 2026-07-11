@@ -53,7 +53,7 @@ namespace LuminaSync.Core.Data
                 return;
             }
 
-            var tables = new[] { "templates", "members", "services" };
+            var tables = new[] { "users", "templates", "members", "services" };
             foreach (var table in tables)
             {
                 try
@@ -78,6 +78,16 @@ namespace LuminaSync.Core.Data
         {
             try
             {
+                // Pull users
+                var usersResponse = await _supabaseClient.From<User>().Get();
+                if (usersResponse.Models != null)
+                {
+                    foreach (var user in usersResponse.Models)
+                    {
+                        await _localDb.SaveItemAsync(user);
+                    }
+                }
+
                 // Pull templates
                 var templatesResponse = await _supabaseClient.From<Template>().Get();
                 if (templatesResponse.Models != null)
