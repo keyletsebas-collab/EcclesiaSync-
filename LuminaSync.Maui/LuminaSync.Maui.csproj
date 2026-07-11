@@ -19,8 +19,8 @@
         <ApplicationId>com.churchmanager.verbumsync</ApplicationId>
 
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.4</ApplicationDisplayVersion>
-        <ApplicationVersion>4</ApplicationVersion>
+        <ApplicationDisplayVersion>1.6</ApplicationDisplayVersion>
+        <ApplicationVersion>6</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
@@ -42,6 +42,7 @@
         <MauiFont Include="Resources\Fonts\*" />
 
         <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
+        <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>
@@ -54,7 +55,7 @@
       <ProjectReference Include="..\LuminaSync.Core\LuminaSync.Core.csproj" />
     </ItemGroup>
 
-    <Target Name="CopyReactDist" BeforeTargets="BeforeBuild;ResolveMauiAssets">
+    <Target Name="CopyReactDist" BeforeTargets="BeforeBuild">
         <Message Importance="high" Text="Cleaning old assets in MAUI Raw directory..." />
         <RemoveDir Directories="$(MSBuildProjectDirectory)\Resources\Raw\assets" />
         <Delete Files="$(MSBuildProjectDirectory)\Resources\Raw\index.html" />
@@ -67,10 +68,6 @@
         <Copy SourceFiles="@(ReactDistFiles)" 
               DestinationFiles="@(ReactDistFiles->'$(MSBuildProjectDirectory)\Resources\Raw\%(RecursiveDir)%(Filename)%(Extension)')"
               SkipUnchangedFiles="true" />
-
-        <ItemGroup>
-            <MauiAsset Include="Resources\Raw\**" />
-        </ItemGroup>
     </Target>
 
 </Project>
