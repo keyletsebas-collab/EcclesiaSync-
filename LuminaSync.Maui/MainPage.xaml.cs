@@ -38,7 +38,7 @@ namespace LuminaSync.Maui
                     MyWebView.Source = new HtmlWebViewSource
                     {
                         Html = htmlContent,
-                        BaseUrl = "file:///android_asset/"
+                        BaseUrl = "file:///android_asset/Resources/Raw/"
                     };
                 }
                 catch (Exception ex)

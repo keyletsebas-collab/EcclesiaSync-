@@ -19,8 +19,8 @@
         <ApplicationId>com.churchmanager.verbumsync</ApplicationId>
 
         <!-- Versions -->
-        <ApplicationDisplayVersion>1.2</ApplicationDisplayVersion>
-        <ApplicationVersion>2</ApplicationVersion>
+        <ApplicationDisplayVersion>1.4</ApplicationDisplayVersion>
+        <ApplicationVersion>4</ApplicationVersion>
 
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'android'">24.0</SupportedOSPlatformVersion>
         <SupportedOSPlatformVersion Condition="$([MSBuild]::GetTargetPlatformIdentifier('$(TargetFramework)')) == 'windows'">10.0.17763.0</SupportedOSPlatformVersion>
@@ -69,7 +69,7 @@
               SkipUnchangedFiles="true" />
 
         <ItemGroup>
-            <MauiAsset Include="Resources\Raw\**" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+            <MauiAsset Include="Resources\Raw\**" />
         </ItemGroup>
     </Target>
 
