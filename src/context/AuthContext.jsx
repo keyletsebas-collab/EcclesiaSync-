@@ -1,42 +1,42 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 
 const AuthContext = createContext();
 
-// Production URL on Vercel — update this if your Vercel domain changes
-const VERCEL_PRODUCTION_URL = 'https://churchmanager-six.vercel.app';
-
-const getApiUrl = () => {
-    if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
-
-    // Capacitor (Android/iOS native WebView) — always use production Vercel URL
-    if (
-        window.Capacitor ||
-        window.location.protocol === 'capacitor:' ||
-        window.location.protocol === 'ionic:' ||
-        (window.location.hostname === 'localhost' && /Android|iPhone|iPad/i.test(window.navigator?.userAgent || ''))
-    ) {
-        return VERCEL_PRODUCTION_URL;
-    }
-
-    // Deployed on Vercel or any real web host — use same-origin (relative API calls)
-    if (
-        window.location.hostname &&
-        window.location.hostname !== 'localhost' &&
-        window.location.hostname !== '127.0.0.1' &&
-        !window.location.hostname.startsWith('192.168.')
-    ) {
-        return window.location.origin;
-    }
-
-    // Local development fallback
-    const hostname = window.location.hostname || '127.0.0.1';
-    return `http://${hostname}:3001`;
-};
-
-const API_URL = getApiUrl();
-
 export const useAuth = () => {
     return useContext(AuthContext);
+};
+
+// Helper to convert DB user row to app user object
+const mapUserToObj = (row) => {
+    if (!row) return null;
+    let memberships = typeof row.memberships === 'string' ? JSON.parse(row.memberships) : row.memberships || [];
+    
+    // Self-healing: if any membership is missing fullName or phone, recover it from others
+    const profile = memberships.find(m => m.fullName) || {};
+    const commonName = profile.fullName || row.username;
+    const commonPhone = profile.phone || '';
+    const commonEmail = profile.email || row.username;
+    
+    memberships = memberships.map(m => ({
+        ...m,
+        fullName: m.fullName || commonName,
+        phone: m.phone || commonPhone,
+        email: m.email || commonEmail
+    }));
+
+    return {
+        uid: row.uid,
+        username: row.username,
+        password: row.password,
+        isMaster: row.is_master,
+        accountId: row.account_id,
+        createdAt: row.created_at,
+        isBlocked: row.is_blocked,
+        memberships,
+        birthday: row.birthday,
+        address: row.address
+    };
 };
 
 export const AuthProvider = ({ children }) => {
@@ -55,7 +55,7 @@ export const AuthProvider = ({ children }) => {
     });
 
     const [users, setUsers] = useState([]);
-    const [loading] = useState(false);
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {
         if (currentUser) {
@@ -81,21 +81,15 @@ export const AuthProvider = ({ children }) => {
         const refreshUser = async () => {
             if (!currentUser) return;
             try {
-                const response = await fetch(`${API_URL}/api/auth/users/${currentUser.uid}`);
-                if (response.ok) {
-                    const data = await response.json();
-                    if (data.success && data.user) {
-                        const userObj = {
-                            uid: data.user.uid,
-                            username: data.user.username,
-                            isMaster: data.user.isMaster,
-                            accountId: data.user.accountId,
-                            memberships: data.user.memberships || [],
-                            birthday: data.user.birthday,
-                            address: data.user.address
-                        };
-                        setCurrentUser(userObj);
-                    }
+                const { data, error } = await supabase
+                    .from('users')
+                    .select('*')
+                    .eq('uid', currentUser.uid)
+                    .single();
+
+                if (error) throw error;
+                if (data) {
+                    setCurrentUser(mapUserToObj(data));
                 }
             } catch (err) {
                 console.error('Failed to refresh user on mount:', err);
@@ -120,78 +114,161 @@ export const AuthProvider = ({ children }) => {
 
     const fetchUsers = async () => {
         try {
-            const response = await fetch(`${API_URL}/api/auth/users`, {
-                headers: {
-                    'X-User-Uid': currentUser?.uid || ''
-                }
-            });
-            const data = await response.json();
+            const { data, error } = await supabase
+                .from('users')
+                .select('*');
+            if (error) throw error;
             if (Array.isArray(data)) {
-                setUsers(data);
+                setUsers(data.map(mapUserToObj));
             }
         } catch (err) {
             console.error('Failed to fetch users:', err);
         }
     };
 
-    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '') => {
+    const autoJoinTemplates = async (accountId, name, phone) => {
+        if (!name || !name.trim()) return;
         try {
-            const response = await fetch(`${API_URL}/api/auth/signup`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email, password, isMaster, accountId, fullName, phone, email })
-            });
-            const data = await response.json();
-            if (data.success) {
-                const user = {
-                    uid: data.uid,
-                    username: data.username,
-                    isMaster: data.isMaster,
-                    accountId: data.accountId,
-                    memberships: data.memberships || [],
-                    birthday: data.birthday,
-                    address: data.address
-                };
-                setCurrentUser(user);
-                setActiveAccountId(data.accountId);
-                return { success: true };
+            // Get all templates for this account
+            const { data: templates, error: tErr } = await supabase
+                .from('templates')
+                .select('*')
+                .eq('account_id', accountId);
+
+            if (tErr) throw tErr;
+            if (!templates) return;
+
+            // Get all members
+            const { data: members, error: mErr } = await supabase
+                .from('members')
+                .select('*');
+
+            if (mErr) throw mErr;
+
+            for (const template of templates) {
+                const templateMembers = (members || []).filter(m => m.template_id === template.id);
+                const exists = templateMembers.some(m => m.name?.toLowerCase().trim() === name.toLowerCase().trim());
+                if (!exists) {
+                    const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
+                    const nextNumber = maxNumber + 1;
+
+                    const newMemberRow = {
+                        id: crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2),
+                        template_id: template.id,
+                        account_id: accountId,
+                        name: name.trim(),
+                        number: nextNumber,
+                        phone: phone?.trim() || '',
+                        identifications: {
+                            familyRole: '',
+                            familyName: '',
+                            hasKey: false,
+                            needsPrayer: false
+                        },
+                        created_at: new Date().toISOString()
+                    };
+
+                    const { error: insErr } = await supabase.from('members').insert([newMemberRow]);
+                    if (insErr) console.error('Failed to auto join template:', insErr);
+                    else console.log(`Auto-joined member ${name} to template ${template.name}`);
+                }
             }
-            return { success: false, error: data.error };
         } catch (err) {
-            console.error('Signup error:', err);
-            return { success: false, error: 'Server connection error' };
+            console.error('Failed to auto join templates:', err);
         }
     };
 
+    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '') => {
+        try {
+            const username = email?.toLowerCase().trim();
+
+            // Check if username exists
+            const { data: existingUser, error: checkErr } = await supabase
+                .from('users')
+                .select('uid')
+                .eq('username', username)
+                .maybeSingle();
+
+            if (checkErr) throw checkErr;
+            if (existingUser) {
+                return { success: false, error: 'Username already exists' };
+            }
+
+            const finalAccountId = accountId 
+                ? accountId.trim().toUpperCase() 
+                : (crypto.randomUUID ? crypto.randomUUID().substring(0, 8).toUpperCase() : Math.random().toString(36).substring(2, 10).toUpperCase());
+
+            const uid = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+            const createdAt = new Date().toISOString();
+
+            const memberships = [{
+                id: finalAccountId,
+                role: isMaster ? 'master' : 'editor',
+                expiresAt: null,
+                fullName: fullName.trim(),
+                phone: phone.trim(),
+                email: username
+            }];
+
+            const newUserRow = {
+                uid,
+                username,
+                password,
+                is_master: isMaster,
+                account_id: finalAccountId,
+                created_at: createdAt,
+                is_blocked: false,
+                memberships
+            };
+
+            const { error: insErr } = await supabase.from('users').insert([newUserRow]);
+            if (insErr) throw insErr;
+
+            const mappedUser = mapUserToObj(newUserRow);
+            setCurrentUser(mappedUser);
+            setActiveAccountId(finalAccountId);
+
+            // Auto join templates in the background
+            autoJoinTemplates(finalAccountId, fullName || username, phone);
+
+            return { success: true };
+        } catch (err) {
+            console.error('Signup error:', err);
+            return { success: false, error: err.message || 'Server error' };
+        }
+    };
 
     const login = async (email, password) => {
         try {
-            const response = await fetch(`${API_URL}/api/auth/login`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ username: email, password })
-            });
-            const data = await response.json();
-            if (data.success) {
-                const user = {
-                    uid: data.uid,
-                    username: data.username,
-                    isMaster: data.isMaster,
-                    accountId: data.accountId,
-                    memberships: data.memberships || [],
-                    birthday: data.birthday,
-                    address: data.address
-                };
-                setCurrentUser(user);
-                // Default to their primary account but prioritize saved active account
-                const savedActive = localStorage.getItem('app_active_account_id');
-                setActiveAccountId(savedActive || data.accountId);
-                return { success: true };
+            const username = email?.toLowerCase().trim();
+            console.log(`🔑 Login attempt for: ${username}`);
+
+            const { data: userRow, error } = await supabase
+                .from('users')
+                .select('*')
+                .eq('username', username)
+                .eq('password', password)
+                .maybeSingle();
+
+            if (error) throw error;
+            if (!userRow) {
+                return { success: false, error: 'Invalid username or password' };
             }
-            return { success: false, error: data.error };
+
+            if (userRow.is_blocked) {
+                return { success: false, error: 'Account is blocked' };
+            }
+
+            const mappedUser = mapUserToObj(userRow);
+            setCurrentUser(mappedUser);
+
+            const savedActive = localStorage.getItem('app_active_account_id');
+            setActiveAccountId(savedActive || mappedUser.accountId);
+
+            return { success: true };
         } catch (err) {
             console.error('Login error:', err);
-            return { success: false, error: 'Server connection error' };
+            return { success: false, error: err.message || 'Server connection error' };
         }
     };
 
@@ -201,14 +278,16 @@ export const AuthProvider = ({ children }) => {
 
     const updateUserRole = async (uid, updates) => {
         try {
-            await fetch(`${API_URL}/api/auth/users/${uid}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify(updates)
-            });
+            const dbUpdates = {};
+            if (updates.isMaster !== undefined) dbUpdates.is_master = !!updates.isMaster;
+            if (updates.isBlocked !== undefined) dbUpdates.is_blocked = !!updates.isBlocked;
+
+            const { error } = await supabase
+                .from('users')
+                .update(dbUpdates)
+                .eq('uid', uid);
+
+            if (error) throw error;
             await fetchUsers();
         } catch (err) {
             console.error('Failed to update user role:', err);
@@ -217,14 +296,12 @@ export const AuthProvider = ({ children }) => {
 
     const toggleBlockUser = async (uid, isBlocked) => {
         try {
-            await fetch(`${API_URL}/api/auth/users/${uid}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ isBlocked })
-            });
+            const { error } = await supabase
+                .from('users')
+                .update({ is_blocked: isBlocked })
+                .eq('uid', uid);
+
+            if (error) throw error;
             await fetchUsers();
         } catch (err) {
             console.error('Failed to toggle block:', err);
@@ -233,12 +310,12 @@ export const AuthProvider = ({ children }) => {
 
     const deleteUser = async (uid) => {
         try {
-            await fetch(`${API_URL}/api/auth/users/${uid}`, {
-                method: 'DELETE',
-                headers: {
-                    'X-User-Uid': currentUser?.uid || ''
-                }
-            });
+            const { error } = await supabase
+                .from('users')
+                .delete()
+                .eq('uid', uid);
+
+            if (error) throw error;
             await fetchUsers();
         } catch (err) {
             console.error('Failed to delete user:', err);
@@ -248,44 +325,95 @@ export const AuthProvider = ({ children }) => {
     const joinAccount = async (accountId) => {
         if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
-            const res = await fetch(`${API_URL}/api/auth/accounts/join`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid: currentUser.uid, accountId })
-            });
-            const data = await res.json();
-            if (data.success) {
-                const updatedUser = { ...currentUser, memberships: data.memberships };
-                setCurrentUser(updatedUser);
-                setActiveAccountId(accountId); // Auto-switch to joined account
-                return { success: true };
+            const cleanAccountId = accountId.trim().toUpperCase();
+            const memberships = [...(currentUser.memberships || [])];
+
+            if (memberships.some(m => m.id === cleanAccountId)) {
+                return { success: false, error: 'Already a member of this account' };
             }
-            return { success: false, error: data.error };
+
+            const profile = memberships.find(m => m.fullName) || {};
+            const name = profile.fullName || currentUser.username;
+            const phone = profile.phone || '';
+
+            memberships.push({
+                id: cleanAccountId,
+                role: 'editor',
+                expiresAt: null,
+                fullName: name,
+                phone: phone,
+                email: currentUser.username
+            });
+
+            const { error } = await supabase
+                .from('users')
+                .update({ memberships })
+                .eq('uid', currentUser.uid);
+
+            if (error) throw error;
+
+            const updatedUser = { ...currentUser, memberships };
+            setCurrentUser(updatedUser);
+            setActiveAccountId(cleanAccountId);
+
+            autoJoinTemplates(cleanAccountId, name, phone);
+
+            return { success: true };
         } catch (err) {
-            return { success: false, error: 'Connection error' };
+            console.error('Join account error:', err);
+            return { success: false, error: err.message || 'Connection error' };
         }
     };
 
     const updateMembershipRole = async (targetUid, accountId, role, expiresAt) => {
-        if (!currentUser) return;
+        if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
-            const res = await fetch(`${API_URL}/api/auth/accounts/role`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ 
-                    masterUid: currentUser.uid, 
-                    targetUid, 
-                    accountId, 
-                    role, 
-                    expiresAt 
-                })
-            });
-            return await res.json();
+            // Check if current user is master of this account
+            const myMembership = currentUser.memberships?.find(m => m.id === accountId);
+            if (!currentUser.isMaster && myMembership?.role !== 'master') {
+                return { success: false, error: 'Only Master of this account can manage roles' };
+            }
+
+            // Get target user
+            const { data: targetRow, error: getErr } = await supabase
+                .from('users')
+                .select('*')
+                .eq('uid', targetUid)
+                .single();
+
+            if (getErr) throw getErr;
+            if (!targetRow) return { success: false, error: 'Target user not found' };
+
+            const targetUser = mapUserToObj(targetRow);
+            const memberships = [...(targetUser.memberships || [])];
+            const index = memberships.findIndex(m => m.id === accountId);
+
+            const oldMembership = index >= 0 ? memberships[index] : {};
+            const newMembership = {
+                ...oldMembership,
+                id: accountId,
+                role,
+                expiresAt: expiresAt || null
+            };
+
+            if (index >= 0) {
+                memberships[index] = newMembership;
+            } else {
+                memberships.push(newMembership);
+            }
+
+            const { error: updErr } = await supabase
+                .from('users')
+                .update({ memberships })
+                .eq('uid', targetUid);
+
+            if (updErr) throw updErr;
+
+            await fetchUsers();
+            return { success: true };
         } catch (err) {
-            console.error('Failed to update role:', err);
+            console.error('Failed to update membership role:', err);
+            return { success: false, error: err.message };
         }
     };
 
@@ -299,21 +427,19 @@ export const AuthProvider = ({ children }) => {
     const updateProfile = async (birthday, address) => {
         if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
-            const response = await fetch(`${API_URL}/api/auth/profile`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ uid: currentUser.uid, birthday, address })
-            });
-            const data = await response.json();
-            if (data.success) {
-                const updatedUser = { ...currentUser, birthday, address };
-                setCurrentUser(updatedUser);
-                return { success: true };
-            }
-            return { success: false, error: data.error };
+            const { error } = await supabase
+                .from('users')
+                .update({ birthday, address })
+                .eq('uid', currentUser.uid);
+
+            if (error) throw error;
+
+            const updatedUser = { ...currentUser, birthday, address };
+            setCurrentUser(updatedUser);
+            return { success: true };
         } catch (err) {
             console.error('Update profile error:', err);
-            return { success: false, error: 'Connection error' };
+            return { success: false, error: err.message || 'Connection error' };
         }
     };
 

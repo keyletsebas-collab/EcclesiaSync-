@@ -1,43 +1,66 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
+import { supabase } from '../lib/supabase';
 
 const StorageContext = createContext();
 
-// Production URL on Vercel — keep in sync with AuthContext.jsx
-const VERCEL_PRODUCTION_URL = 'https://churchmanager-six.vercel.app';
-
-const getApiUrl = () => {
-    if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
-
-    // Capacitor (Android/iOS native WebView) — always use production Vercel URL
-    if (
-        window.Capacitor ||
-        window.location.protocol === 'capacitor:' ||
-        window.location.protocol === 'ionic:' ||
-        (window.location.hostname === 'localhost' && /Android|iPhone|iPad/i.test(window.navigator?.userAgent || ''))
-    ) {
-        return VERCEL_PRODUCTION_URL;
-    }
-
-    // Deployed on Vercel or any real web host — use same-origin (relative API calls)
-    if (
-        window.location.hostname &&
-        window.location.hostname !== 'localhost' &&
-        window.location.hostname !== '127.0.0.1' &&
-        !window.location.hostname.startsWith('192.168.')
-    ) {
-        return window.location.origin;
-    }
-
-    // Local development fallback
-    const hostname = window.location.hostname || '127.0.0.1';
-    return `http://${hostname}:3001`;
-};
-
-const API_URL = getApiUrl();
-
 export const useStorage = () => {
     return useContext(StorageContext);
+};
+
+// --- Mapping Helpers (snake_case DB -> camelCase JS) ---
+
+const mapTemplateToObj = (row) => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        accountId: row.account_id,
+        name: row.name,
+        customFields: typeof row.custom_fields === 'string' ? JSON.parse(row.custom_fields) : row.custom_fields || [],
+        createdAt: row.created_at
+    };
+};
+
+const mapMemberToObj = (row) => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        accountId: row.account_id,
+        name: row.name,
+        number: row.number,
+        phone: row.phone,
+        identifications: typeof row.identifications === 'string' ? JSON.parse(row.identifications) : row.identifications || {},
+        createdAt: row.created_at
+    };
+};
+
+const mapServiceToObj = (row) => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        memberId: row.member_id,
+        accountId: row.account_id,
+        memberName: row.member_name,
+        serviceDate: row.service_date,
+        serviceType: row.service_type,
+        createdAt: row.created_at,
+        program: row.program,
+        assignedMembers: typeof row.assigned_members === 'string' ? JSON.parse(row.assigned_members) : row.assigned_members || []
+    };
+};
+
+const mapProgramToObj = (row) => {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        accountId: row.account_id,
+        title: row.title,
+        content: row.content,
+        createdAt: row.created_at
+    };
 };
 
 export const StorageProvider = ({ children, accountId: propAccountId }) => {
@@ -59,29 +82,23 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         setLoading(true);
         console.log('🔄 [LuminaSync] Conectando a la base de datos Supabase...');
 
-        const safeFetch = async (url, defaultVal) => {
-            try {
-                const res = await fetch(url, { headers: { 'X-User-Uid': currentUser?.uid || '' } });
-                if (!res.ok) {
-                    const errText = await res.text();
-                    console.warn(`⚠️ [LuminaSync] Error de conexión al consultar ${url}:`, errText);
-                    return defaultVal;
-                }
-                const data = await res.json();
-                return Array.isArray(data) ? data : defaultVal;
-            } catch (err) {
-                console.error(`❌ [LuminaSync] Excepción al conectar con ${url}:`, err.message);
-                return defaultVal;
-            }
-        };
-
         try {
-            const [tData, mData, sData, pData] = await Promise.all([
-                safeFetch(`${API_URL}/api/templates?accountId=${accountId}`, []),
-                safeFetch(`${API_URL}/api/members?accountId=${accountId}`, []),
-                safeFetch(`${API_URL}/api/services?accountId=${accountId}`, []),
-                safeFetch(`${API_URL}/api/programs?accountId=${accountId}`, [])
+            const [tRes, mRes, sRes, pRes] = await Promise.all([
+                supabase.from('templates').select('*').eq('account_id', accountId),
+                supabase.from('members').select('*').eq('account_id', accountId),
+                supabase.from('services').select('*').eq('account_id', accountId),
+                supabase.from('programs').select('*').eq('account_id', accountId)
             ]);
+
+            if (tRes.error) console.error('Templates fetch error:', tRes.error);
+            if (mRes.error) console.error('Members fetch error:', mRes.error);
+            if (sRes.error) console.error('Services fetch error:', sRes.error);
+            if (pRes.error) console.error('Programs fetch error:', pRes.error);
+
+            const tData = (tRes.data || []).map(mapTemplateToObj);
+            const mData = (mRes.data || []).map(mapMemberToObj);
+            const sData = (sRes.data || []).map(mapServiceToObj);
+            const pData = (pRes.data || []).map(mapProgramToObj);
 
             console.log('✅ [LuminaSync] Conexión a Supabase establecida. Resumen:', {
                 plantillas: tData.length,
@@ -122,40 +139,32 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
         const setupRealtime = async () => {
             try {
-                const configRes = await fetch(`${API_URL}/api/config`);
-                const config = await configRes.json();
+                channel = supabase.channel(`room-${accountId}`);
                 
-                if (config.supabaseUrl && config.supabaseAnonKey) {
-                    const { createClient } = await import('@supabase/supabase-js');
-                    const supabaseClient = createClient(config.supabaseUrl, config.supabaseAnonKey);
-                    
-                    channel = supabaseClient.channel(`room-${accountId}`);
-                    
-                    channel
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
-                            console.log('🔄 Realtime Member change:', payload);
-                            fetchData();
-                        })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
-                            console.log('🔄 Realtime Service change:', payload);
-                            fetchData();
-                        })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'templates' }, (payload) => {
-                            console.log('🔄 Realtime Template change:', payload);
-                            fetchData();
-                        })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, (payload) => {
-                            console.log('🔄 Realtime Program change:', payload);
-                            fetchData();
-                        })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
-                            console.log('🔄 Realtime Transaction change:', payload);
-                            fetchData();
-                        })
-                        .subscribe((status) => {
-                            console.log('📡 Realtime subscription status:', status);
-                        });
-                }
+                channel
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
+                        console.log('🔄 Realtime Member change:', payload);
+                        fetchData();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
+                        console.log('🔄 Realtime Service change:', payload);
+                        fetchData();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'templates' }, (payload) => {
+                        console.log('🔄 Realtime Template change:', payload);
+                        fetchData();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, (payload) => {
+                        console.log('🔄 Realtime Program change:', payload);
+                        fetchData();
+                    })
+                    .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+                        console.log('🔄 Realtime Transaction change:', payload);
+                        fetchData();
+                    })
+                    .subscribe((status) => {
+                        console.log('📡 Realtime subscription status:', status);
+                    });
             } catch (err) {
                 console.error('Failed to set up frontend realtime connection:', err);
             }
@@ -186,24 +195,21 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         setIsCreatingTemplate(true);
 
         try {
-            const res = await fetch(`${API_URL}/api/templates`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ accountId, name, customFields, uid: currentUser?.uid })
-            });
+            const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+            const newTemplateRow = {
+                id: newId,
+                account_id: accountId,
+                name,
+                custom_fields: customFields,
+                created_at: new Date().toISOString()
+            };
 
-            if (!res.ok) {
-                const data = await res.json().catch(() => ({}));
-                throw new Error(data.error || `Error del servidor: ${res.status}`);
-            }
+            const { error } = await supabase.from('templates').insert([newTemplateRow]);
+            if (error) throw error;
 
-            const newTemplate = await res.json();
             setTemplates(prev => {
-                if (prev.find(t => t.id === newTemplate.id)) return prev;
-                return [...prev, newTemplate];
+                if (prev.find(t => t.id === newId)) return prev;
+                return [...prev, mapTemplateToObj(newTemplateRow)];
             });
         } catch (err) {
             console.error('Failed to add template:', err);
@@ -216,14 +222,17 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const updateTemplate = async (id, updatedData) => {
         setTemplates(prev => prev.map(t => t.id === id ? { ...t, ...updatedData } : t));
         try {
-            await fetch(`${API_URL}/api/templates/${id}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
-            });
+            const dbUpdates = {};
+            if (updatedData.name !== undefined) dbUpdates.name = updatedData.name;
+            if (updatedData.customFields !== undefined) dbUpdates.custom_fields = updatedData.customFields;
+            if (updatedData.accountId !== undefined) dbUpdates.account_id = updatedData.accountId;
+
+            const { error } = await supabase
+                .from('templates')
+                .update(dbUpdates)
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to update template:', err);
             fetchData();
@@ -233,10 +242,12 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const deleteTemplate = async (id) => {
         setTemplates(prev => prev.filter(t => t.id !== id));
         try {
-            await fetch(`${API_URL}/api/templates/${id}?uid=${currentUser?.uid}`, { 
-                method: 'DELETE',
-                headers: { 'X-User-Uid': currentUser?.uid || '' }
-            });
+            const { error } = await supabase
+                .from('templates')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to delete template:', err);
             fetchData();
@@ -247,25 +258,22 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     const addMember = async (templateId, memberData) => {
         const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        const newMember = { id: tempId, templateId, accountId, ...memberData, createdAt: new Date().toISOString() };
+        const newMemberRow = {
+            id: tempId,
+            template_id: templateId,
+            account_id: accountId,
+            name: memberData.name,
+            number: (memberData.number === '' || memberData.number === null || memberData.number === undefined) ? 0 : parseInt(memberData.number, 10),
+            phone: memberData.phone || '',
+            identifications: memberData.identifications || {},
+            created_at: new Date().toISOString()
+        };
         
-        setMembers(prev => [...prev, newMember]);
+        setMembers(prev => [...prev, mapMemberToObj(newMemberRow)]);
         
         try {
-            const res = await fetch(`${API_URL}/api/members`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ id: tempId, templateId, accountId, ...memberData, uid: currentUser?.uid })
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed to add member');
-            }
-            const saved = await res.json();
-            setMembers(prev => prev.map(m => m.id === tempId ? saved : m));
+            const { error } = await supabase.from('members').insert([newMemberRow]);
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to add member:', err);
             alert(`Error al unirse: ${err.message}`);
@@ -277,18 +285,22 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         const prevMembers = [...members];
         setMembers(prev => prev.map(m => m.id === id ? { ...m, ...updatedData } : m));
         try {
-            const res = await fetch(`${API_URL}/api/members/${id}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed to update member');
+            const dbUpdates = {};
+            if (updatedData.templateId !== undefined) dbUpdates.template_id = updatedData.templateId;
+            if (updatedData.accountId !== undefined) dbUpdates.account_id = updatedData.accountId;
+            if (updatedData.name !== undefined) dbUpdates.name = updatedData.name;
+            if (updatedData.number !== undefined) {
+                dbUpdates.number = (updatedData.number === '' || updatedData.number === null || updatedData.number === undefined) ? 0 : parseInt(updatedData.number, 10);
             }
+            if (updatedData.phone !== undefined) dbUpdates.phone = updatedData.phone;
+            if (updatedData.identifications !== undefined) dbUpdates.identifications = updatedData.identifications;
+
+            const { error } = await supabase
+                .from('members')
+                .update(dbUpdates)
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to update member:', err);
             alert(`Error al actualizar miembro: ${err.message}`);
@@ -300,14 +312,12 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         const prevMembers = [...members];
         setMembers(prev => prev.filter(m => m.id !== id));
         try {
-            const res = await fetch(`${API_URL}/api/members/${id}?uid=${currentUser?.uid}`, { 
-                method: 'DELETE',
-                headers: { 'X-User-Uid': currentUser?.uid || '' }
-            });
-            if (!res.ok) {
-                const data = await res.json();
-                throw new Error(data.error || 'Failed to delete member');
-            }
+            const { error } = await supabase
+                .from('members')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to delete member:', err);
             alert(`Error al eliminar miembro: ${err.message}`);
@@ -319,21 +329,24 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '', program = '', assignedMembers = []) => {
         const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        const newService = { id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, program, assignedMembers, createdAt: new Date().toISOString() };
+        const newServiceRow = {
+            id: tempId,
+            template_id: templateId,
+            member_id: memberId,
+            account_id: accountId,
+            member_name: memberName,
+            service_date: serviceDate,
+            service_type: serviceType,
+            program,
+            assigned_members: assignedMembers,
+            created_at: new Date().toISOString()
+        };
         
-        setServices(prev => [...prev, newService]);
+        setServices(prev => [...prev, mapServiceToObj(newServiceRow)]);
 
         try {
-            const res = await fetch(`${API_URL}/api/services`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, program, assignedMembers, uid: currentUser?.uid })
-            });
-            const saved = await res.json();
-            setServices(prev => prev.map(s => s.id === tempId ? saved : s));
+            const { error } = await supabase.from('services').insert([newServiceRow]);
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to add service:', err);
             fetchData();
@@ -343,14 +356,22 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const updateService = async (id, updatedData) => {
         setServices(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
         try {
-            await fetch(`${API_URL}/api/services/${id}`, {
-                method: 'PUT',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ ...updatedData, uid: currentUser?.uid })
-            });
+            const dbUpdates = {};
+            if (updatedData.templateId !== undefined) dbUpdates.template_id = updatedData.templateId;
+            if (updatedData.memberId !== undefined) dbUpdates.member_id = updatedData.memberId;
+            if (updatedData.accountId !== undefined) dbUpdates.account_id = updatedData.accountId;
+            if (updatedData.memberName !== undefined) dbUpdates.member_name = updatedData.memberName;
+            if (updatedData.serviceDate !== undefined) dbUpdates.service_date = updatedData.serviceDate;
+            if (updatedData.serviceType !== undefined) dbUpdates.service_type = updatedData.serviceType;
+            if (updatedData.program !== undefined) dbUpdates.program = updatedData.program;
+            if (updatedData.assignedMembers !== undefined) dbUpdates.assigned_members = updatedData.assignedMembers;
+
+            const { error } = await supabase
+                .from('services')
+                .update(dbUpdates)
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to update service:', err);
             fetchData();
@@ -360,10 +381,12 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const deleteService = async (id) => {
         setServices(prev => prev.filter(s => s.id !== id));
         try {
-            await fetch(`${API_URL}/api/services/${id}?uid=${currentUser?.uid}`, { 
-                method: 'DELETE',
-                headers: { 'X-User-Uid': currentUser?.uid || '' }
-            });
+            const { error } = await supabase
+                .from('services')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to delete service:', err);
             fetchData();
@@ -374,21 +397,20 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     const addProgram = async (templateId, programData) => {
         const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        const newProgram = { id: tempId, templateId, accountId, title: programData.title, content: programData.content, createdAt: new Date().toISOString() };
+        const newProgramRow = {
+            id: tempId,
+            template_id: templateId,
+            account_id: accountId,
+            title: programData.title,
+            content: programData.content,
+            created_at: new Date().toISOString()
+        };
         
-        setPrograms(prev => [...prev, newProgram]);
+        setPrograms(prev => [...prev, mapProgramToObj(newProgramRow)]);
 
         try {
-            const res = await fetch(`${API_URL}/api/programs`, {
-                method: 'POST',
-                headers: { 
-                    'Content-Type': 'application/json',
-                    'X-User-Uid': currentUser?.uid || ''
-                },
-                body: JSON.stringify({ id: tempId, templateId, accountId, title: programData.title, content: programData.content, uid: currentUser?.uid })
-            });
-            const saved = await res.json();
-            setPrograms(prev => prev.map(p => p.id === tempId ? saved : p));
+            const { error } = await supabase.from('programs').insert([newProgramRow]);
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to add program:', err);
             fetchData();
@@ -398,10 +420,12 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const deleteProgram = async (id) => {
         setPrograms(prev => prev.filter(p => p.id !== id));
         try {
-            await fetch(`${API_URL}/api/programs/${id}?uid=${currentUser?.uid}`, { 
-                method: 'DELETE',
-                headers: { 'X-User-Uid': currentUser?.uid || '' }
-            });
+            const { error } = await supabase
+                .from('programs')
+                .delete()
+                .eq('id', id);
+
+            if (error) throw error;
         } catch (err) {
             console.error('Failed to delete program:', err);
             fetchData();

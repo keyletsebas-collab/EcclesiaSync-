@@ -3,33 +3,8 @@
  * Used for OCR and text extraction from poetry photos/docs
  */
 
-const getApiUrl = () => {
-  if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
-  if (window.location.hostname && 
-      window.location.hostname !== 'localhost' && 
-      window.location.hostname !== '127.0.0.1' && 
-      window.location.hostname !== '10.0.2.2' &&
-      !window.location.hostname.startsWith('192.168.') &&
-      !window.location.protocol.startsWith('file')) {
-      return window.location.origin;
-  }
-  const hostname = window.location.hostname || '127.0.0.1';
-  return `http://${hostname}:3001`;
-};
-
-let cachedApiKey = null;
-
-const getGeminiApiKey = async () => {
-  if (cachedApiKey) return cachedApiKey;
-  try {
-    const configRes = await fetch(`${getApiUrl()}/api/config`);
-    const config = await configRes.json();
-    cachedApiKey = config.geminiApiKey || '';
-    return cachedApiKey;
-  } catch (err) {
-    console.error("Failed to load Gemini API key from config:", err);
-    return '';
-  }
+const getGeminiApiKey = () => {
+  return import.meta.env.VITE_GEMINI_API_KEY || '';
 };
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
@@ -146,7 +121,7 @@ const digitalizeWordDocument = async (file) => {
 };
 
 const callGemini = async (payload) => {
-  const apiKey = await getGeminiApiKey();
+  const apiKey = getGeminiApiKey();
   if (!apiKey) {
     throw new Error("No se ha configurado la clave API de Gemini. Por favor, añádela al archivo .env del proyecto como GEMINI_API_KEY.");
   }

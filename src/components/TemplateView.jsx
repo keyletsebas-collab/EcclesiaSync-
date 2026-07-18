@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { supabase } from '../lib/supabase';
 import { useStorage } from '../context/StorageContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
@@ -1619,6 +1620,17 @@ const ProgramsView = ({ templateId, accountId, isTemplateEditor }) => {
     );
 };
 
+const mapTxToObj = (row) => ({
+    id: row.id,
+    templateId: row.template_id,
+    accountId: row.account_id,
+    type: row.type,
+    amount: parseFloat(row.amount),
+    description: row.description,
+    date: row.date,
+    createdAt: row.created_at
+});
+
 const FinancesView = ({ templateId, accountId, isTemplateAdmin }) => {
     const [transactions, setTransactions] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -1631,15 +1643,13 @@ const FinancesView = ({ templateId, accountId, isTemplateAdmin }) => {
     const fetchTransactions = async () => {
         setLoading(true);
         try {
-            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
-            const response = await fetch(`${apiHost}/api/transactions?templateId=${templateId}`, {
-                headers: {
-                    'X-User-Uid': currentUser?.uid || ''
-                }
-            });
-            const data = await response.json();
+            const { data, error } = await supabase
+                .from('transactions')
+                .select('*')
+                .eq('template_id', templateId);
+            if (error) throw error;
             if (Array.isArray(data)) {
-                setTransactions(data);
+                setTransactions(data.map(mapTxToObj));
             }
         } catch (err) {
             console.error('Failed to fetch transactions:', err);
@@ -1656,48 +1666,38 @@ const FinancesView = ({ templateId, accountId, isTemplateAdmin }) => {
         e.preventDefault();
         if (!description.trim() || !amount) return;
         try {
-            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
-            const res = await fetch(`${apiHost}/api/transactions`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    templateId,
-                    accountId,
-                    type,
-                    amount: parseFloat(amount),
-                    description: description.trim(),
-                    date,
-                    uid: currentUser?.uid
-                })
-            });
-            if (res.ok) {
-                setDescription('');
-                setAmount('');
-                fetchTransactions();
-            } else {
-                const errData = await res.json();
-                alert('Error al agregar: ' + errData.error);
-            }
+            const newTxId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+            const newTxRow = {
+                id: newTxId,
+                template_id: templateId,
+                account_id: accountId,
+                type,
+                amount: parseFloat(amount),
+                description: description.trim(),
+                date
+            };
+            const { error } = await supabase.from('transactions').insert([newTxRow]);
+            if (error) throw error;
+
+            setDescription('');
+            setAmount('');
+            fetchTransactions();
         } catch (err) {
-            alert('Error de conexión');
+            alert('Error al agregar: ' + err.message);
         }
     };
 
     const handleDelete = async (id) => {
         if (!window.confirm('¿Seguro que deseas eliminar esta transacción?')) return;
         try {
-            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
-            const res = await fetch(`${apiHost}/api/transactions/${id}?uid=${currentUser?.uid}`, {
-                method: 'DELETE'
-            });
-            if (res.ok) {
-                fetchTransactions();
-            } else {
-                const errData = await res.json();
-                alert('Error al eliminar: ' + errData.error);
-            }
+            const { error } = await supabase
+                .from('transactions')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+            fetchTransactions();
         } catch (err) {
-            alert('Error de conexión');
+            alert('Error al eliminar: ' + err.message);
         }
     };
 
