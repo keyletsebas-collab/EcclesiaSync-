@@ -4,8 +4,8 @@ using Postgrest.Models;
 
 namespace LuminaSync.Core.Models
 {
-    [Table("members")]
-    public class Member : BaseModel
+    [Table("transactions")]
+    public class Transaction : BaseModel
     {
         [PrimaryKey("id", false)]
         public string Id { get; set; } = string.Empty;
@@ -16,17 +16,17 @@ namespace LuminaSync.Core.Models
         [Column("account_id")]
         public string AccountId { get; set; } = string.Empty;
 
-        [Column("name")]
-        public string Name { get; set; } = string.Empty;
+        [Column("type")]
+        public string Type { get; set; } = string.Empty; // "income" or "expense"
 
-        [Column("number")]
-        public int Number { get; set; }
+        [Column("amount")]
+        public decimal Amount { get; set; }
 
-        [Column("phone")]
-        public string Phone { get; set; } = string.Empty;
+        [Column("description")]
+        public string Description { get; set; } = string.Empty;
 
-        [Column("identifications")]
-        public string Identifications { get; set; } = "{}";
+        [Column("date")]
+        public string Date { get; set; } = string.Empty;
 
         [Column("created_at")]
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

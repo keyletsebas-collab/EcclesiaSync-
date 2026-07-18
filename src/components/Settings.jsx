@@ -11,7 +11,8 @@ import {
 const Settings = ({ isOpen, onClose }) => {
     const { 
         currentUser, logout, users, fetchUsers, 
-        toggleBlockUser, deleteUser, joinAccount, updateMembershipRole 
+        toggleBlockUser, deleteUser, joinAccount, updateMembershipRole,
+        updateProfile
     } = useAuth();
     const { currentLanguage, setLanguage, t } = useLanguage();
     const { theme, setTheme } = useTheme();
@@ -20,6 +21,32 @@ const Settings = ({ isOpen, onClose }) => {
     const [joinError, setJoinError] = useState('');
     const [visiblePasswords, setVisiblePasswords] = useState({});
     const [loadingAction, setLoadingAction] = useState(null);
+
+    const [birthday, setBirthday] = useState(currentUser?.birthday || '');
+    const [address, setAddress] = useState(currentUser?.address || '');
+    const [saveLoading, setSaveLoading] = useState(false);
+    const [saveSuccess, setSaveSuccess] = useState(false);
+
+    useEffect(() => {
+        if (currentUser) {
+            setBirthday(currentUser.birthday || '');
+            setAddress(currentUser.address || '');
+        }
+    }, [currentUser]);
+
+    const handleSaveProfile = async (e) => {
+        e.preventDefault();
+        setSaveLoading(true);
+        setSaveSuccess(false);
+        const res = await updateProfile(birthday, address);
+        setSaveLoading(false);
+        if (res.success) {
+            setSaveSuccess(true);
+            setTimeout(() => setSaveSuccess(false), 3000);
+        } else {
+            alert('Error al guardar el perfil: ' + res.error);
+        }
+    };
 
     useEffect(() => {
         if (isOpen && currentUser?.isMaster) {
@@ -150,6 +177,39 @@ const Settings = ({ isOpen, onClose }) => {
                         </button>
                     </div>
                     {joinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>{joinError}</p>}
+                </form>
+            </div>
+
+            {/* Perfil del Usuario: Cumpleaños y Dirección */}
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
+                    <User size={16} /> Perfil del Usuario
+                </h4>
+                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Fecha de Cumpleaños</label>
+                        <input 
+                            type="date" 
+                            className="glass-input" 
+                            value={birthday}
+                            onChange={(e) => setBirthday(e.target.value)}
+                            style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Dirección de Casa</label>
+                        <textarea 
+                            className="glass-input" 
+                            placeholder="Calle, Ciudad, etc."
+                            rows={2}
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem', resize: 'vertical' }}
+                        />
+                    </div>
+                    <button type="submit" disabled={saveLoading} className="btn btn-primary" style={{ fontSize: '0.875rem', padding: '0.5rem', justifyContent: 'center' }}>
+                        {saveLoading ? 'Guardando...' : saveSuccess ? '¡Perfil Guardado!' : 'Guardar Perfil'}
+                    </button>
                 </form>
             </div>
 

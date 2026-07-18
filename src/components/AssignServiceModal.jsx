@@ -1,40 +1,47 @@
 import React, { useState } from 'react';
 import { useLanguage } from '../context/LanguageContext';
+import { useStorage } from '../context/StorageContext';
 import Modal from './Modal';
 import { Calendar, Users, Flame, Info } from 'lucide-react';
 
-const AssignServiceModal = ({ isOpen, onClose, members, onAssign }) => {
+const AssignServiceModal = ({ isOpen, onClose, templateId, members, onAssign }) => {
     const { t } = useLanguage();
-    const [memberId, setMemberId] = useState('');
-    const [serviceDate, setServiceDate] = useState('Lunes');
+    const { programs } = useStorage();
+    const [selectedMemberIds, setSelectedMemberIds] = useState([]);
+    const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
     const [serviceType, setServiceType] = useState('');
+    const [selectedProgramId, setSelectedProgramId] = useState('');
     const [isCampaign, setIsCampaign] = useState(false);
 
-    const WEEKDAYS = [
-        { value: 'Lunes', label: 'Lunes' },
-        { value: 'Martes', label: 'Martes' },
-        { value: 'Miércoles', label: 'Miércoles' },
-        { value: 'Jueves', label: 'Jueves' },
-        { value: 'Viernes', label: 'Viernes' },
-        { value: 'Sábado', label: 'Sábado' },
-        { value: 'Domingo', label: 'Domingo' }
-    ];
+    const templatePrograms = (programs || []).filter(p => p.templateId === templateId);
 
     const handleSubmit = (e) => {
         e.preventDefault();
-        if (!memberId || !serviceDate) return;
+        if (selectedMemberIds.length === 0 || !serviceDate) {
+            alert('Por favor selecciona al menos un miembro.');
+            return;
+        }
 
-        const selectedMember = members.find(m => m.id === memberId);
+        const selectedMembers = selectedMemberIds.map(id => {
+            const m = members.find(x => x.id === id);
+            return { id: m.id, name: m.name };
+        });
+
+        const primaryMember = selectedMembers[0];
         const finalServiceType = isCampaign 
             ? (serviceType.trim() ? `Campaña - ${serviceType.trim()}` : 'Campaña') 
             : serviceType.trim();
 
-        onAssign(memberId, selectedMember.name, serviceDate, finalServiceType);
+        const selectedProgram = templatePrograms.find(p => p.id === selectedProgramId);
+        const programText = selectedProgram ? `=== ${selectedProgram.title} ===\n${selectedProgram.content}` : '';
+
+        onAssign(primaryMember.id, primaryMember.name, serviceDate, finalServiceType, selectedMembers, programText);
 
         // Reset
-        setMemberId('');
-        setServiceDate('Lunes');
+        setSelectedMemberIds([]);
+        setServiceDate(new Date().toISOString().split('T')[0]);
         setServiceType('');
+        setSelectedProgramId('');
         setIsCampaign(false);
         onClose();
     };
@@ -45,39 +52,77 @@ const AssignServiceModal = ({ isOpen, onClose, members, onAssign }) => {
                 <div style={{ marginBottom: '1.25rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
                         <Users size={16} color="var(--primary)" />
-                        Seleccionar Miembro
+                        Seleccionar Miembros (Puedes elegir varios)
                     </label>
-                    <select
-                        className="glass-input"
-                        value={memberId}
-                        onChange={(e) => setMemberId(e.target.value)}
-                        required
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
-                    >
-                        <option value="">-- Elige un miembro --</option>
-                        {members.map(member => (
-                            <option key={member.id} value={member.id}>
-                                {member.name} {member.number ? `(#${member.number})` : ''}
-                            </option>
-                        ))}
-                    </select>
+                    <div style={{
+                        maxHeight: '180px',
+                        overflowY: 'auto',
+                        border: '1px solid var(--border)',
+                        borderRadius: '10px',
+                        padding: '0.75rem',
+                        background: 'rgba(255, 255, 255, 0.01)'
+                    }}>
+                        {members.map(member => {
+                            const isChecked = selectedMemberIds.includes(member.id);
+                            return (
+                                <label key={member.id} style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.75rem',
+                                    padding: '0.4rem 0',
+                                    cursor: 'pointer',
+                                    borderBottom: '1px solid rgba(255,255,255,0.02)'
+                                }}>
+                                    <input
+                                        type="checkbox"
+                                        checked={isChecked}
+                                        onChange={() => {
+                                            if (isChecked) {
+                                                setSelectedMemberIds(selectedMemberIds.filter(id => id !== member.id));
+                                            } else {
+                                                setSelectedMemberIds([...selectedMemberIds, member.id]);
+                                            }
+                                        }}
+                                        style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                    />
+                                    <span style={{ fontSize: '0.875rem' }}>
+                                        {member.name} {member.number ? `(#${member.number})` : ''}
+                                    </span>
+                                </label>
+                            );
+                        })}
+                    </div>
                 </div>
 
                 <div style={{ marginBottom: '1.25rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
                         <Calendar size={16} color="var(--primary)" />
-                        Día de Servicio (Semanal)
+                        Seleccionar Fecha de Salida
                     </label>
-                    <select
+                    <input
+                        type="date"
                         className="glass-input"
                         value={serviceDate}
                         onChange={(e) => setServiceDate(e.target.value)}
                         required
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
+                    />
+                </div>
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
+                        📖 Adjuntar Programa Guardado (Opcional)
+                    </label>
+                    <select
+                        className="glass-input"
+                        value={selectedProgramId}
+                        onChange={(e) => setSelectedProgramId(e.target.value)}
+                        style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
                     >
-                        {WEEKDAYS.map(day => (
-                            <option key={day.value} value={day.value}>
-                                {day.label}
+                        <option value="">-- Ninguno (Escribir manualmente en agenda) --</option>
+                        {templatePrograms.map(p => (
+                            <option key={p.id} value={p.id}>
+                                {p.title}
                             </option>
                         ))}
                     </select>
@@ -86,13 +131,13 @@ const AssignServiceModal = ({ isOpen, onClose, members, onAssign }) => {
                 <div style={{ marginBottom: '1.25rem' }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
                         <Info size={16} color="var(--primary)" />
-                        Tipo de Servicio / Función
+                        Lugar / Función / Detalles
                     </label>
                     <input
                         className="glass-input"
                         value={serviceType}
                         onChange={(e) => setServiceType(e.target.value)}
-                        placeholder="Ej: Lector, Predicador, Acompañante"
+                        placeholder="Ej: Iglesia de Ozama, Ensayos generales, etc."
                         style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
                     />
                 </div>

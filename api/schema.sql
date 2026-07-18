@@ -60,3 +60,44 @@ ALTER TABLE users DISABLE ROW LEVEL SECURITY;
 ALTER TABLE templates DISABLE ROW LEVEL SECURITY;
 ALTER TABLE members DISABLE ROW LEVEL SECURITY;
 ALTER TABLE services DISABLE ROW LEVEL SECURITY;
+
+-- --- MIGRATIONS (July 11, 2026) ---
+
+-- 1. Add birthday and address columns to users
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birthday VARCHAR(100);
+ALTER TABLE users ADD COLUMN IF NOT EXISTS address TEXT;
+
+-- 2. Create transactions table (incomes/expenses)
+CREATE TABLE IF NOT EXISTS transactions (
+    id UUID PRIMARY KEY,
+    template_id UUID REFERENCES templates(id) ON DELETE CASCADE,
+    account_id VARCHAR(50) NOT NULL,
+    type VARCHAR(20) NOT NULL, -- 'income' or 'expense'
+    amount NUMERIC(12, 2) NOT NULL,
+    description TEXT NOT NULL,
+    date VARCHAR(100) NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_transactions_template_id ON transactions(template_id);
+CREATE INDEX IF NOT EXISTS idx_transactions_account_id ON transactions(account_id);
+
+-- 3. Add program and assigned_members to services
+ALTER TABLE services ADD COLUMN IF NOT EXISTS program TEXT;
+ALTER TABLE services ADD COLUMN IF NOT EXISTS assigned_members JSONB DEFAULT '[]'::jsonb;
+
+-- --- MIGRATIONS (July 13, 2026) ---
+
+-- 1. Create programs table
+CREATE TABLE IF NOT EXISTS programs (
+    id TEXT PRIMARY KEY,
+    template_id TEXT NOT NULL,
+    account_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+ALTER TABLE programs DISABLE ROW LEVEL SECURITY;
+CREATE INDEX IF NOT EXISTS idx_programs_template_id ON programs(template_id);
+
+

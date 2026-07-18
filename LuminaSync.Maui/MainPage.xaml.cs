@@ -10,7 +10,6 @@ namespace LuminaSync.Maui
 {
     public partial class MainPage : ContentPage
     {
-        private LocalDatabase? _db;
         private SyncEngine? _sync;
         private LocalWebServer? _server;
 
@@ -53,25 +52,17 @@ namespace LuminaSync.Maui
         {
             try
             {
-                // 1. Establish SQLite DB path
-                string folderPath = FileSystem.AppDataDirectory;
-                string dbPath = Path.Combine(folderPath, "church_cache.db");
+                // Initialize Supabase Sync Engine
+                string supabaseUrl = "https://hkmmotgmfsfdxyavsozx.supabase.co";
+                string supabaseKey = "sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L";
 
-                // 2. Initialize Database
-                _db = new LocalDatabase(dbPath);
+                _sync = new SyncEngine(supabaseUrl, supabaseKey);
 
-                // 3. Initialize Supabase Sync Engine
-                string supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL") ?? "https://placeholder-url.supabase.co";
-                string supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY") ?? "placeholder-key";
-
-                _sync = new SyncEngine(_db, supabaseUrl, supabaseKey);
-
-                // Await initialization of tables and data sync before starting server
-                await _db.InitializeAsync();
+                // Await initialization of data connection before starting server
                 await _sync.InitializeAsync();
 
-                // 4. Start local Web Server
-                _server = new LocalWebServer(_db, _sync);
+                // Start local Web Server
+                _server = new LocalWebServer(_sync);
                 _server.Start();
             }
             catch (Exception ex)

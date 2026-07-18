@@ -13,14 +13,12 @@ namespace LuminaSync.Core.Network
     public class LocalWebServer
     {
         private readonly HttpListener _listener;
-        private readonly LocalDatabase _db;
         private readonly SyncEngine _sync;
         private readonly int _port;
         private bool _isRunning;
 
-        public LocalWebServer(LocalDatabase db, SyncEngine sync, int port = 3001)
+        public LocalWebServer(SyncEngine sync, int port = 3001)
         {
-            _db = db;
             _sync = sync;
             _port = port;
             _listener = new HttpListener();
@@ -84,7 +82,7 @@ namespace LuminaSync.Core.Network
             // CORS headers
             res.Headers.Add("Access-Control-Allow-Origin", "*");
             res.Headers.Add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
-            res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization");
+            res.Headers.Add("Access-Control-Allow-Headers", "Content-Type, Authorization, X-User-Uid");
 
             if (req.HttpMethod == "OPTIONS")
             {
@@ -113,8 +111,8 @@ namespace LuminaSync.Core.Network
                 }
                 else if (path == "/api/config" && method == "GET")
                 {
-                    string supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL") ?? "https://placeholder-url.supabase.co";
-                    string supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY") ?? "placeholder-key";
+                    string supabaseUrl = "https://hkmmotgmfsfdxyavsozx.supabase.co";
+                    string supabaseKey = "sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L";
                     responseBody = JsonConvert.SerializeObject(new {
                         supabaseUrl,
                         supabaseAnonKey = supabaseKey
@@ -126,7 +124,8 @@ namespace LuminaSync.Core.Network
                     var payload = JsonConvert.DeserializeObject<SignupRequest>(requestBody);
                     if (payload == null) throw new ArgumentException("Invalid body");
 
-                    var users = await _db.GetItemsAsync<User>();
+                    var response = await _sync.GetSupabaseClient().From<User>().Get();
+                    var users = response.Models ?? new List<User>();
                     var exists = users.Find(u => u.Username.Equals(payload.username, StringComparison.OrdinalIgnoreCase));
                     if (exists != null)
                     {
@@ -156,8 +155,7 @@ namespace LuminaSync.Core.Network
                         };
 
                         await _sync.SaveTemplateAsync(new Template { Id = Guid.NewGuid().ToString(), AccountId = accountId, Name = "General", CustomFields = "[]" });
-                        // Add user using SyncEngine (upsert to Supabase)
-                        await _localDbSaveAndSupabaseUpsert(user);
+                        await _supabaseUserUpsert(user);
 
                         responseBody = JsonConvert.SerializeObject(new { 
                             success = true, 
@@ -174,7 +172,8 @@ namespace LuminaSync.Core.Network
                     var payload = JsonConvert.DeserializeObject<LoginRequest>(requestBody);
                     if (payload == null) throw new ArgumentException("Invalid body");
 
-                    var users = await _db.GetItemsAsync<User>();
+                    var response = await _sync.GetSupabaseClient().From<User>().Get();
+                    var users = response.Models ?? new List<User>();
                     var user = users.Find(u => u.Username.Equals(payload.username, StringComparison.OrdinalIgnoreCase) && u.Password == payload.password);
 
                     if (user == null)
@@ -196,6 +195,8 @@ namespace LuminaSync.Core.Network
                             isMaster = user.IsMaster,
                             accountId = user.AccountId,
                             uid = user.Uid,
+                            birthday = user.Birthday,
+                            address = user.Address,
                             memberships = mList
                         });
                     }
@@ -204,7 +205,8 @@ namespace LuminaSync.Core.Network
                 {
                     if (await ValidateIsKeyletAsync(req, res))
                     {
-                        var users = await _db.GetItemsAsync<User>();
+                        var response = await _sync.GetSupabaseClient().From<User>().Get();
+                        var users = response.Models ?? new List<User>();
                         responseBody = JsonConvert.SerializeObject(users);
                     }
                     else
@@ -220,7 +222,8 @@ namespace LuminaSync.Core.Network
                         var payload = JsonConvert.DeserializeObject<UserUpdatePayload>(requestBody);
                         if (payload == null) throw new ArgumentException("Invalid body");
 
-                        var users = await _db.GetItemsAsync<User>();
+                        var response = await _sync.GetSupabaseClient().From<User>().Get();
+                        var users = response.Models ?? new List<User>();
                         var user = users.Find(u => u.Uid == uid);
                         if (user != null)
                         {
@@ -228,7 +231,7 @@ namespace LuminaSync.Core.Network
                             if (payload.isBlocked != null) user.IsBlocked = payload.isBlocked.Value;
                             if (payload.memberships != null) user.memberships = JsonConvert.SerializeObject(payload.memberships);
 
-                            await _localDbSaveAndSupabaseUpsert(user);
+                            await _supabaseUserUpsert(user);
                             responseBody = JsonConvert.SerializeObject(new { success = true });
                         }
                         else
@@ -241,24 +244,38 @@ namespace LuminaSync.Core.Network
                         responseBody = JsonConvert.SerializeObject(new { error = "Access denied" });
                     }
                 }
+                else if (path == "/api/auth/profile" && method == "PUT")
+                {
+                    var payload = JsonConvert.DeserializeObject<ProfileUpdatePayload>(requestBody);
+                    if (payload == null || string.IsNullOrEmpty(payload.uid)) throw new ArgumentException("Invalid body");
+
+                    var response = await _sync.GetSupabaseClient().From<User>().Get();
+                    var users = response.Models ?? new List<User>();
+                    var user = users.Find(u => u.Uid == payload.uid);
+                    if (user != null)
+                    {
+                        if (payload.birthday != null) user.Birthday = payload.birthday;
+                        if (payload.address != null) user.Address = payload.address;
+
+                        await _supabaseUserUpsert(user);
+                        responseBody = JsonConvert.SerializeObject(new { success = true });
+                    }
+                    else
+                    {
+                        res.StatusCode = (int)HttpStatusCode.NotFound;
+                    }
+                }
                 else if (path.StartsWith("/api/auth/users/") && method == "DELETE")
                 {
                     if (await ValidateIsKeyletAsync(req, res))
                     {
                         var uid = path.Substring("/api/auth/users/".Length);
-                        var users = await _db.GetItemsAsync<User>();
+                        var response = await _sync.GetSupabaseClient().From<User>().Get();
+                        var users = response.Models ?? new List<User>();
                         var user = users.Find(u => u.Uid == uid);
                         if (user != null)
                         {
-                            await _db.DeleteItemAsync(user);
-                            try
-                            {
-                                await _sync.GetSupabaseClient().From<User>().Delete(user);
-                            }
-                            catch (Exception ex)
-                            {
-                                Console.WriteLine($"[WebServer] Failed to delete user from Supabase: {ex.Message}");
-                            }
+                            await _sync.GetSupabaseClient().From<User>().Delete(user);
                             responseBody = JsonConvert.SerializeObject(new { success = true });
                         }
                         else
@@ -276,7 +293,8 @@ namespace LuminaSync.Core.Network
                     var payload = JsonConvert.DeserializeObject<RoleUpdateRequest>(requestBody);
                     if (payload == null) throw new ArgumentException("Invalid body");
 
-                    var users = await _db.GetItemsAsync<User>();
+                    var response = await _sync.GetSupabaseClient().From<User>().Get();
+                    var users = response.Models ?? new List<User>();
                     var targetUser = users.Find(u => u.Uid == payload.targetUid);
                     if (targetUser == null)
                     {
@@ -298,7 +316,7 @@ namespace LuminaSync.Core.Network
                         }
 
                         targetUser.memberships = JsonConvert.SerializeObject(memberships);
-                        await _localDbSaveAndSupabaseUpsert(targetUser);
+                        await _supabaseUserUpsert(targetUser);
                         responseBody = JsonConvert.SerializeObject(new { success = true });
                     }
                 }
@@ -306,7 +324,8 @@ namespace LuminaSync.Core.Network
                 else if (path == "/api/templates" && method == "GET")
                 {
                     var accountId = req.QueryString["accountId"] ?? "";
-                    var all = await _db.GetItemsAsync<Template>();
+                    var response = await _sync.GetSupabaseClient().From<Template>().Get();
+                    var all = response.Models ?? new List<Template>();
                     var filtered = all.FindAll(t => t.AccountId == accountId);
                     responseBody = JsonConvert.SerializeObject(filtered);
                 }
@@ -323,7 +342,8 @@ namespace LuminaSync.Core.Network
                 else if (path.StartsWith("/api/templates/") && method == "DELETE")
                 {
                     var id = path.Substring("/api/templates/".Length);
-                    var all = await _db.GetItemsAsync<Template>();
+                    var response = await _sync.GetSupabaseClient().From<Template>().Get();
+                    var all = response.Models ?? new List<Template>();
                     var template = all.Find(t => t.Id == id);
                     if (template != null)
                     {
@@ -341,7 +361,8 @@ namespace LuminaSync.Core.Network
                     var accountId = req.QueryString["accountId"] ?? "";
                     if (await CheckIfSonidoAsync(accountId) || await ValidateIsKeyletAsync(req, res))
                     {
-                        var all = await _db.GetItemsAsync<Member>();
+                        var response = await _sync.GetSupabaseClient().From<Member>().Get();
+                        var all = response.Models ?? new List<Member>();
                         var filtered = all.FindAll(m => m.AccountId == accountId);
                         responseBody = JsonConvert.SerializeObject(filtered);
                     }
@@ -363,11 +384,82 @@ namespace LuminaSync.Core.Network
                 else if (path.StartsWith("/api/members/") && method == "DELETE")
                 {
                     var id = path.Substring("/api/members/".Length);
-                    var all = await _db.GetItemsAsync<Member>();
+                    var response = await _sync.GetSupabaseClient().From<Member>().Get();
+                    var all = response.Models ?? new List<Member>();
                     var member = all.Find(m => m.Id == id);
                     if (member != null)
                     {
                         await _sync.DeleteMemberAsync(member);
+                        responseBody = JsonConvert.SerializeObject(new { success = true });
+                    }
+                    else
+                    {
+                        res.StatusCode = (int)HttpStatusCode.NotFound;
+                    }
+                }
+                // --- TRANSACTIONS ---
+                else if (path == "/api/transactions" && method == "GET")
+                {
+                    var templateId = req.QueryString["templateId"] ?? "";
+                    var response = await _sync.GetSupabaseClient().From<Transaction>().Get();
+                    var all = response.Models ?? new List<Transaction>();
+                    var filtered = string.IsNullOrEmpty(templateId) ? all : all.FindAll(t => t.TemplateId == templateId);
+                    responseBody = JsonConvert.SerializeObject(filtered);
+                }
+                else if (path == "/api/transactions" && method == "POST")
+                {
+                    var tx = JsonConvert.DeserializeObject<Transaction>(requestBody);
+                    if (tx == null) throw new ArgumentException("Invalid body");
+                    if (string.IsNullOrEmpty(tx.Id)) tx.Id = Guid.NewGuid().ToString();
+                    tx.CreatedAt = DateTime.UtcNow;
+
+                    await _sync.GetSupabaseClient().From<Transaction>().Upsert(tx);
+                    responseBody = JsonConvert.SerializeObject(tx);
+                }
+                else if (path.StartsWith("/api/transactions/") && method == "DELETE")
+                {
+                    var id = path.Substring("/api/transactions/".Length);
+                    var response = await _sync.GetSupabaseClient().From<Transaction>().Get();
+                    var all = response.Models ?? new List<Transaction>();
+                    var tx = all.Find(t => t.Id == id);
+                    if (tx != null)
+                    {
+                        await _sync.GetSupabaseClient().From<Transaction>().Delete(tx);
+                        responseBody = JsonConvert.SerializeObject(new { success = true });
+                    }
+                    else
+                    {
+                        res.StatusCode = (int)HttpStatusCode.NotFound;
+                    }
+                }
+                // --- PROGRAMS ---
+                else if (path == "/api/programs" && method == "GET")
+                {
+                    var templateId = req.QueryString["templateId"] ?? "";
+                    var response = await _sync.GetSupabaseClient().From<HubProgram>().Get();
+                    var all = response.Models ?? new List<HubProgram>();
+                    var filtered = string.IsNullOrEmpty(templateId) ? all : all.FindAll(p => p.TemplateId == templateId);
+                    responseBody = JsonConvert.SerializeObject(filtered);
+                }
+                else if (path == "/api/programs" && method == "POST")
+                {
+                    var p = JsonConvert.DeserializeObject<HubProgram>(requestBody);
+                    if (p == null) throw new ArgumentException("Invalid body");
+                    if (string.IsNullOrEmpty(p.Id)) p.Id = Guid.NewGuid().ToString();
+                    p.CreatedAt = DateTime.UtcNow;
+
+                    await _sync.GetSupabaseClient().From<HubProgram>().Upsert(p);
+                    responseBody = JsonConvert.SerializeObject(p);
+                }
+                else if (path.StartsWith("/api/programs/") && method == "DELETE")
+                {
+                    var id = path.Substring("/api/programs/".Length);
+                    var response = await _sync.GetSupabaseClient().From<HubProgram>().Get();
+                    var all = response.Models ?? new List<HubProgram>();
+                    var p = all.Find(x => x.Id == id);
+                    if (p != null)
+                    {
+                        await _sync.GetSupabaseClient().From<HubProgram>().Delete(p);
                         responseBody = JsonConvert.SerializeObject(new { success = true });
                     }
                     else
@@ -381,7 +473,8 @@ namespace LuminaSync.Core.Network
                     var accountId = req.QueryString["accountId"] ?? "";
                     if (await CheckIfSonidoAsync(accountId) || await ValidateIsKeyletAsync(req, res))
                     {
-                        var all = await _db.GetItemsAsync<Service>();
+                        var response = await _sync.GetSupabaseClient().From<Service>().Get();
+                        var all = response.Models ?? new List<Service>();
                         var filtered = all.FindAll(s => s.AccountId == accountId);
                         responseBody = JsonConvert.SerializeObject(filtered);
                     }
@@ -400,10 +493,35 @@ namespace LuminaSync.Core.Network
                     await _sync.SaveServiceAsync(s);
                     responseBody = JsonConvert.SerializeObject(s);
                 }
+                else if (path.StartsWith("/api/services/") && method == "PUT")
+                {
+                    var id = path.Substring("/api/services/".Length);
+                    var response = await _sync.GetSupabaseClient().From<Service>().Get();
+                    var all = response.Models ?? new List<Service>();
+                    var service = all.Find(s => s.Id == id);
+                    if (service != null)
+                    {
+                        var updates = JsonConvert.DeserializeObject<ServiceUpdatePayload>(requestBody);
+                        if (updates != null)
+                        {
+                            if (updates.serviceType != null) service.ServiceType = updates.serviceType;
+                            if (updates.program != null) service.Program = updates.program;
+                            if (updates.assignedMembers != null) service.AssignedMembers = updates.assignedMembers;
+
+                            await _sync.SaveServiceAsync(service);
+                            responseBody = JsonConvert.SerializeObject(new { success = true });
+                        }
+                    }
+                    else
+                    {
+                        res.StatusCode = (int)HttpStatusCode.NotFound;
+                    }
+                }
                 else if (path.StartsWith("/api/services/") && method == "DELETE")
                 {
                     var id = path.Substring("/api/services/".Length);
-                    var all = await _db.GetItemsAsync<Service>();
+                    var response = await _sync.GetSupabaseClient().From<Service>().Get();
+                    var all = response.Models ?? new List<Service>();
                     var service = all.Find(s => s.Id == id);
                     if (service != null)
                     {
@@ -442,28 +560,82 @@ namespace LuminaSync.Core.Network
                 return false;
             }
 
-            var users = await _db.GetItemsAsync<User>();
+            var response = await _sync.GetSupabaseClient().From<User>().Get();
+            var users = response.Models ?? new List<User>();
             var user = users.Find(u => u.Uid == userUid);
-            if (user == null || !user.Username.Equals("keylet", StringComparison.OrdinalIgnoreCase))
+            if (user == null)
             {
                 res.StatusCode = (int)HttpStatusCode.Forbidden;
                 return false;
             }
 
-            return true;
+            // Unconditional allow for main admin "keylet"
+            if (user.Username.Equals("keylet", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            // Check if user has membership in the account
+            var accountId = req.QueryString["accountId"];
+            if (string.IsNullOrEmpty(accountId))
+            {
+                // Fallback: if no account ID requested, check if user has memberships at all
+                var hasAnyMembership = false;
+                try
+                {
+                    var mList = JsonConvert.DeserializeObject<List<MembershipItem>>(user.memberships) ?? new List<MembershipItem>();
+                    hasAnyMembership = mList.Count > 0;
+                }
+                catch {}
+                if (hasAnyMembership) return true;
+
+                res.StatusCode = (int)HttpStatusCode.Forbidden;
+                return false;
+            }
+
+            // Verify membership role
+            try
+            {
+                var memberships = JsonConvert.DeserializeObject<List<MembershipItem>>(user.memberships) ?? new List<MembershipItem>();
+                var membership = memberships.Find(m => m.id == accountId);
+                if (membership != null)
+                {
+                    // Check expiration if set
+                    if (!string.IsNullOrEmpty(membership.expiresAt) && DateTime.TryParse(membership.expiresAt, out var exp) && exp < DateTime.UtcNow)
+                    {
+                        res.StatusCode = (int)HttpStatusCode.Forbidden;
+                        return false;
+                    }
+
+                    // Any role (master, editor, viewer) has at least read/viewer access
+                    var rolesOrder = new System.Collections.Generic.Dictionary<string, int> { { "master", 3 }, { "editor", 2 }, { "viewer", 1 } };
+                    var userRole = membership.role ?? "viewer";
+                    if (rolesOrder.ContainsKey(userRole))
+                    {
+                        return true;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[WebServer] Error parsing user memberships in ValidateIsKeyletAsync: {ex.Message}");
+            }
+
+            res.StatusCode = (int)HttpStatusCode.Forbidden;
+            return false;
         }
 
         private async Task<bool> CheckIfSonidoAsync(string accountId)
         {
             if (string.IsNullOrEmpty(accountId)) return false;
-            var templates = await _db.GetItemsAsync<Template>();
+            var response = await _sync.GetSupabaseClient().From<Template>().Get();
+            var templates = response.Models ?? new List<Template>();
             var accountTemplates = templates.FindAll(t => t.AccountId == accountId);
             return accountTemplates.Exists(t => t.CustomFields.Contains("__sonido__"));
         }
 
-        private async Task _localDbSaveAndSupabaseUpsert(User user)
+        private async Task _supabaseUserUpsert(User user)
         {
-            await _db.SaveItemAsync(user);
             try
             {
                 await _sync.GetSupabaseClient().From<User>().Upsert(user);
@@ -494,6 +666,20 @@ namespace LuminaSync.Core.Network
             public bool? isMaster { get; set; }
             public bool? isBlocked { get; set; }
             public List<MembershipItem>? memberships { get; set; }
+        }
+
+        private class ProfileUpdatePayload
+        {
+            public string uid { get; set; } = "";
+            public string birthday { get; set; } = "";
+            public string address { get; set; } = "";
+        }
+
+        private class ServiceUpdatePayload
+        {
+            public string? serviceType { get; set; }
+            public string? program { get; set; }
+            public string? assignedMembers { get; set; }
         }
 
         private class RoleUpdateRequest

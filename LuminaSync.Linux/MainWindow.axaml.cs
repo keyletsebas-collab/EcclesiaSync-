@@ -9,7 +9,6 @@ namespace LuminaSync.Linux
 {
     public partial class MainWindow : Window
     {
-        private LocalDatabase? _db;
         private SyncEngine? _sync;
         private LocalWebServer? _server;
 
@@ -34,39 +33,26 @@ namespace LuminaSync.Linux
         {
             try
             {
-                // 1. Establish SQLite DB path
-                string appData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string folderPath = Path.Combine(appData, "VerbumSync");
-                if (!Directory.Exists(folderPath))
-                {
-                    Directory.CreateDirectory(folderPath);
-                }
-                string dbPath = Path.Combine(folderPath, "church_cache.db");
+                // Initialize Supabase Sync Engine
+                string supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL") ?? "https://hkmmotgmfsfdxyavsozx.supabase.co";
+                string supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY") ?? "sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L";
 
-                // 2. Initialize Database
-                _db = new LocalDatabase(dbPath);
-
-                // 3. Initialize Supabase Sync Engine
-                string supabaseUrl = Environment.GetEnvironmentVariable("SUPABASE_URL") ?? "https://placeholder-url.supabase.co";
-                string supabaseKey = Environment.GetEnvironmentVariable("SUPABASE_SERVICE_ROLE_KEY") ?? "placeholder-key";
-
-                _sync = new SyncEngine(_db, supabaseUrl, supabaseKey);
+                _sync = new SyncEngine(supabaseUrl, supabaseKey);
                 
                 Task.Run(async () =>
                 {
                     try
                     {
-                        await _db.InitializeAsync();
                         await _sync.InitializeAsync();
                     }
                     catch (Exception ex)
                     {
-                        Console.WriteLine($"[App] Initialization failed: {ex.Message}");
+                        Console.WriteLine($"[App] Sync Engine Initialization failed: {ex.Message}");
                     }
                 });
 
-                // 4. Start local Web Server
-                _server = new LocalWebServer(_db, _sync);
+                // Start local Web Server
+                _server = new LocalWebServer(_sync);
                 _server.Start();
             }
             catch (Exception ex)

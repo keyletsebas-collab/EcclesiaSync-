@@ -8,6 +8,7 @@
     "dev-client": "vite --host",
     "server": "node api/index.js",
     "start": "npm run dev",
+    "tunnel": "concurrently \"vite preview --host\" \"npm run server\" \"npx localtunnel --port 5173 --subdomain verbumsync\"",
     "db:init": "node api/init-supabase.js",
     "build": "vite build",
     "lint": "eslint .",

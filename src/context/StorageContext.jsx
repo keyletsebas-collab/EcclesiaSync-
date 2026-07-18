@@ -3,27 +3,35 @@ import { useAuth } from './AuthContext';
 
 const StorageContext = createContext();
 
+// Production URL on Vercel — keep in sync with AuthContext.jsx
+const VERCEL_PRODUCTION_URL = 'https://churchmanager-six.vercel.app';
+
 const getApiUrl = () => {
     if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
 
-    // If it's a web host (Vercel, etc.)
-    if (window.location.hostname && 
-        window.location.hostname !== 'localhost' && 
-        window.location.hostname !== '127.0.0.1' && 
-        window.location.hostname !== '10.0.2.2' &&
-        !window.location.protocol.startsWith('file')) {
+    // Capacitor (Android/iOS native WebView) — always use production Vercel URL
+    if (
+        window.Capacitor ||
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'ionic:' ||
+        (window.location.hostname === 'localhost' && /Android|iPhone|iPad/i.test(window.navigator?.userAgent || ''))
+    ) {
+        return VERCEL_PRODUCTION_URL;
+    }
+
+    // Deployed on Vercel or any real web host — use same-origin (relative API calls)
+    if (
+        window.location.hostname &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1' &&
+        !window.location.hostname.startsWith('192.168.')
+    ) {
         return window.location.origin;
     }
 
-    // Android WebView check
-    if (window.navigator && /Android/i.test(window.navigator.userAgent)) {
-        if (window.location.hostname === '10.0.2.2') {
-            return 'http://10.0.2.2:3001';
-        }
-        return 'http://127.0.0.1:3001';
-    }
-
-    return 'http://127.0.0.1:3001';
+    // Local development fallback
+    const hostname = window.location.hostname || '127.0.0.1';
+    return `http://${hostname}:3001`;
 };
 
 const API_URL = getApiUrl();
@@ -38,6 +46,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const [templates, setTemplates] = useState([]);
     const [members, setMembers] = useState([]);
     const [services, setServices] = useState([]);
+    const [programs, setPrograms] = useState([]);
     const [loading, setLoading] = useState(false);
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
     
@@ -48,24 +57,45 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const fetchData = async () => {
         if (!accountId) return;
         setLoading(true);
-        try {
-            const [tRes, mRes, sRes] = await Promise.all([
-                fetch(`${API_URL}/api/templates?accountId=${accountId}`, { headers: { 'X-User-Uid': currentUser?.uid || '' } }),
-                fetch(`${API_URL}/api/members?accountId=${accountId}`, { headers: { 'X-User-Uid': currentUser?.uid || '' } }),
-                fetch(`${API_URL}/api/services?accountId=${accountId}`, { headers: { 'X-User-Uid': currentUser?.uid || '' } })
-            ]);
+        console.log('🔄 [LuminaSync] Conectando a la base de datos Supabase...');
 
-            const [tData, mData, sData] = await Promise.all([
-                tRes.json(), mRes.json(), sRes.json()
-            ]);
-
-            if (Array.isArray(tData)) {
-                setTemplates(tData);
+        const safeFetch = async (url, defaultVal) => {
+            try {
+                const res = await fetch(url, { headers: { 'X-User-Uid': currentUser?.uid || '' } });
+                if (!res.ok) {
+                    const errText = await res.text();
+                    console.warn(`⚠️ [LuminaSync] Error de conexión al consultar ${url}:`, errText);
+                    return defaultVal;
+                }
+                const data = await res.json();
+                return Array.isArray(data) ? data : defaultVal;
+            } catch (err) {
+                console.error(`❌ [LuminaSync] Excepción al conectar con ${url}:`, err.message);
+                return defaultVal;
             }
-            if (Array.isArray(mData)) setMembers(mData);
-            if (Array.isArray(sData)) setServices(sData);
+        };
+
+        try {
+            const [tData, mData, sData, pData] = await Promise.all([
+                safeFetch(`${API_URL}/api/templates?accountId=${accountId}`, []),
+                safeFetch(`${API_URL}/api/members?accountId=${accountId}`, []),
+                safeFetch(`${API_URL}/api/services?accountId=${accountId}`, []),
+                safeFetch(`${API_URL}/api/programs?accountId=${accountId}`, [])
+            ]);
+
+            console.log('✅ [LuminaSync] Conexión a Supabase establecida. Resumen:', {
+                plantillas: tData.length,
+                miembros: mData.length,
+                servicios: sData.length,
+                programas: pData.length
+            });
+
+            setTemplates(tData);
+            setMembers(mData);
+            setServices(sData);
+            setPrograms(pData);
         } catch (err) {
-            console.error('🔴 Fetch error in StorageContext:', err);
+            console.error('❌ [LuminaSync] Error general de carga de datos:', err);
         } finally {
             setLoading(false);
         }
@@ -73,8 +103,16 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     // Initial Fetch
     useEffect(() => {
+        if (!currentUser) {
+            setTemplates([]);
+            setMembers([]);
+            setServices([]);
+            setPrograms([]);
+            setLoading(false);
+            return;
+        }
         fetchData();
-    }, [accountId]);
+    }, [accountId, currentUser?.uid]);
 
     // Realtime Sync Hook
     useEffect(() => {
@@ -94,19 +132,29 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                     channel = supabaseClient.channel(`room-${accountId}`);
                     
                     channel
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'members', filter: `account_id=eq.${accountId}` }, (payload) => {
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
                             console.log('🔄 Realtime Member change:', payload);
                             fetchData();
                         })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'services', filter: `account_id=eq.${accountId}` }, (payload) => {
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
                             console.log('🔄 Realtime Service change:', payload);
                             fetchData();
                         })
-                        .on('postgres_changes', { event: '*', schema: 'public', table: 'templates', filter: `account_id=eq.${accountId}` }, (payload) => {
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'templates' }, (payload) => {
                             console.log('🔄 Realtime Template change:', payload);
                             fetchData();
                         })
-                        .subscribe();
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, (payload) => {
+                            console.log('🔄 Realtime Program change:', payload);
+                            fetchData();
+                        })
+                        .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
+                            console.log('🔄 Realtime Transaction change:', payload);
+                            fetchData();
+                        })
+                        .subscribe((status) => {
+                            console.log('📡 Realtime subscription status:', status);
+                        });
                 }
             } catch (err) {
                 console.error('Failed to set up frontend realtime connection:', err);
@@ -269,9 +317,9 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     // ── Service Actions ───────────────────────────────────────────────────────
 
-    const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '') => {
+    const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '', program = '', assignedMembers = []) => {
         const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
-        const newService = { id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt: new Date().toISOString() };
+        const newService = { id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, program, assignedMembers, createdAt: new Date().toISOString() };
         
         setServices(prev => [...prev, newService]);
 
@@ -282,7 +330,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                     'Content-Type': 'application/json',
                     'X-User-Uid': currentUser?.uid || ''
                 },
-                body: JSON.stringify({ id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, uid: currentUser?.uid })
+                body: JSON.stringify({ id: tempId, templateId, memberId, accountId, memberName, serviceDate, serviceType, program, assignedMembers, uid: currentUser?.uid })
             });
             const saved = await res.json();
             setServices(prev => prev.map(s => s.id === tempId ? saved : s));
@@ -322,6 +370,44 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         }
     };
 
+    // ── Program Actions ───────────────────────────────────────────────────────
+
+    const addProgram = async (templateId, programData) => {
+        const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        const newProgram = { id: tempId, templateId, accountId, title: programData.title, content: programData.content, createdAt: new Date().toISOString() };
+        
+        setPrograms(prev => [...prev, newProgram]);
+
+        try {
+            const res = await fetch(`${API_URL}/api/programs`, {
+                method: 'POST',
+                headers: { 
+                    'Content-Type': 'application/json',
+                    'X-User-Uid': currentUser?.uid || ''
+                },
+                body: JSON.stringify({ id: tempId, templateId, accountId, title: programData.title, content: programData.content, uid: currentUser?.uid })
+            });
+            const saved = await res.json();
+            setPrograms(prev => prev.map(p => p.id === tempId ? saved : p));
+        } catch (err) {
+            console.error('Failed to add program:', err);
+            fetchData();
+        }
+    };
+
+    const deleteProgram = async (id) => {
+        setPrograms(prev => prev.filter(p => p.id !== id));
+        try {
+            await fetch(`${API_URL}/api/programs/${id}?uid=${currentUser?.uid}`, { 
+                method: 'DELETE',
+                headers: { 'X-User-Uid': currentUser?.uid || '' }
+            });
+        } catch (err) {
+            console.error('Failed to delete program:', err);
+            fetchData();
+        }
+    };
+
     const value = {
         templates,
         members,
@@ -336,6 +422,9 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         addService,
         updateService,
         deleteService,
+        programs,
+        addProgram,
+        deleteProgram,
         refreshData: fetchData
     };
 

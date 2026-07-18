@@ -25,7 +25,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/config', (req, res) => {
     res.json({
         supabaseUrl: process.env.SUPABASE_URL || '',
-        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || ''
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+        geminiApiKey: process.env.GEMINI_API_KEY || ''
     });
 });
 
@@ -85,11 +86,11 @@ async function checkIfSonido(templateId, accountId) {
     return false;
 }
 
-// Middleware to verify if the requester is the main admin 'keylet'
+// Middleware to verify if the requester is the main admin 'keylet' or has at least 'viewer' permission in the account
 async function checkIsKeylet(req, res, next) {
-    const userUid = req.headers['x-user-uid'] || req.query.uid || req.body.uid;
-    const accountId = req.query.accountId || req.body.accountId;
-    const templateId = req.query.templateId || req.body.templateId;
+    const userUid = req.headers['x-user-uid'] || req.query.uid || req.body?.uid;
+    const accountId = req.query.accountId || req.body?.accountId;
+    const templateId = req.query.templateId || req.body?.templateId;
 
     if (await checkIfSonido(templateId, accountId)) {
         return next();
@@ -101,9 +102,39 @@ async function checkIsKeylet(req, res, next) {
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === userUid);
-        if (!user || user.username?.toLowerCase() !== 'keylet') {
-            return res.status(403).json({ error: 'Access denied: Restringido al administrador principal' });
+        if (!user) {
+            return res.status(403).json({ error: 'Access denied: Usuario no encontrado' });
         }
+
+        // Allow main admin 'keylet' unconditionally
+        if (user.username?.toLowerCase() === 'keylet') {
+            req.currentUser = user;
+            return next();
+        }
+
+        // Check if user has membership in the account
+        let finalAccountId = accountId;
+        if (!finalAccountId && templateId) {
+            const templates = await storage.getTemplates();
+            const template = templates.find(t => t.id === templateId);
+            if (template) {
+                finalAccountId = template.accountId;
+            }
+        }
+
+        if (!finalAccountId) {
+            // Fallback: check if the user has memberships at all
+            if (user.memberships && user.memberships.length > 0) {
+                req.currentUser = user;
+                return next();
+            }
+            return res.status(403).json({ error: 'Access denied: No tienes acceso a esta cuenta' });
+        }
+
+        if (!checkPermission(user, finalAccountId, 'viewer')) {
+            return res.status(403).json({ error: 'Access denied: Restringido al administrador principal o miembros autorizados' });
+        }
+
         req.currentUser = user;
         next();
     } catch (err) {
@@ -199,6 +230,19 @@ app.get('/api/auth/users', checkIsKeylet, async (req, res) => {
     }
 });
 
+// Get single user details (e.g. on reload)
+app.get('/api/auth/users/:uid', async (req, res) => {
+    const { uid } = req.params;
+    try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!user) return res.status(404).json({ error: 'User not found' });
+        res.json({ success: true, user });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error' });
+    }
+});
+
 // Update user (role and/or block status)
 app.put('/api/auth/users/:uid', checkIsKeylet, async (req, res) => {
     const { uid } = req.params;
@@ -210,6 +254,23 @@ app.put('/api/auth/users/:uid', checkIsKeylet, async (req, res) => {
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: 'Server error' });
+    }
+});
+
+// Update own profile (birthday, address)
+app.put('/api/auth/profile', async (req, res) => {
+    const { uid, birthday, address } = req.body;
+    if (!uid) {
+        return res.status(400).json({ error: 'Missing user UID' });
+    }
+    try {
+        const updates = {};
+        if (birthday !== undefined) updates.birthday = birthday;
+        if (address !== undefined) updates.address = address;
+        await storage.updateUser(uid, updates);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Server error: ' + err.message });
     }
 });
 
@@ -297,7 +358,14 @@ app.post('/api/auth/accounts/role', async (req, res) => {
         const memberships = targetUser.memberships || [];
         const index = memberships.findIndex(m => m.id === accountId);
         
-        const newMembership = { id: accountId, role, expiresAt: expiresAt || null };
+        const oldMembership = index >= 0 ? memberships[index] : {};
+        const newMembership = { 
+            ...oldMembership,
+            id: accountId, 
+            role, 
+            expiresAt: expiresAt || null 
+        };
+        
         if (index >= 0) {
             memberships[index] = newMembership;
         } else {
@@ -482,6 +550,115 @@ app.delete('/api/members/:id', async (req, res) => {
     }
 });
 
+// ─── TRANSACTIONS ─────────────────────────────────────────────────────────────
+
+// Get transactions for a template
+app.get('/api/transactions', checkIsKeylet, async (req, res) => {
+    const { templateId } = req.query;
+    try {
+        const transactions = await storage.getTransactions(templateId);
+        res.json(transactions);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create transaction
+app.post('/api/transactions', async (req, res) => {
+    const { templateId, accountId, type, amount, description, date, uid } = req.body;
+    try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can manage finances' });
+        }
+
+        const id = uuidv4();
+        const newTx = { id, templateId, accountId, type, amount, description, date };
+        await storage.addTransaction(newTx);
+        res.json(newTx);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete transaction
+app.delete('/api/transactions/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.query;
+    try {
+        const transactions = await storage.getTransactions();
+        const tx = transactions.find(t => t.id === id);
+        if (!tx) return res.status(404).json({ error: 'Transaction not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, tx.accountId, 'master')) {
+            return res.status(403).json({ error: 'Only Master can delete finances' });
+        }
+
+        await storage.deleteTransaction(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── PROGRAMS ─────────────────────────────────────────────────────────────────
+
+// Get programs for a template
+app.get('/api/programs', checkIsKeylet, async (req, res) => {
+    const { templateId, accountId } = req.query;
+    try {
+        const programs = await storage.getPrograms(templateId, accountId);
+        res.json(programs);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Create program
+app.post('/api/programs', async (req, res) => {
+    const { templateId, accountId, title, content, uid } = req.body;
+    try {
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, accountId, 'editor')) {
+            return res.status(403).json({ error: 'Access denied to manage programs' });
+        }
+
+        const id = uuidv4();
+        const newProgram = { id, templateId, accountId, title, content, createdAt: new Date().toISOString() };
+        await storage.addProgram(newProgram);
+        res.json(newProgram);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Delete program
+app.delete('/api/programs/:id', async (req, res) => {
+    const { id } = req.params;
+    const { uid } = req.query;
+    try {
+        const programs = await storage.getPrograms();
+        const program = programs.find(p => p.id === id);
+        if (!program) return res.status(404).json({ error: 'Program not found' });
+
+        const users = await storage.getUsers();
+        const user = users.find(u => u.uid === uid);
+        if (!checkPermission(user, program.accountId, 'editor')) {
+            return res.status(403).json({ error: 'Access denied to delete programs' });
+        }
+
+        await storage.deleteProgram(id);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // ─── SERVICES ─────────────────────────────────────────────────────────────────
 
 // Get services
@@ -497,7 +674,7 @@ app.get('/api/services', checkIsKeylet, async (req, res) => {
 
 // Create service
 app.post('/api/services', async (req, res) => {
-    const { templateId, memberId, accountId, memberName, serviceDate, serviceType = '', uid } = req.body;
+    const { templateId, memberId, accountId, memberName, serviceDate, serviceType = '', program = '', assignedMembers = [], uid } = req.body;
     try {
         const users = await storage.getUsers();
         const user = users.find(u => u.uid === uid);
@@ -508,7 +685,7 @@ app.post('/api/services', async (req, res) => {
 
         const id = uuidv4();
         const createdAt = new Date().toISOString();
-        const newService = { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, createdAt };
+        const newService = { id, templateId, memberId, accountId, memberName, serviceDate, serviceType, program, assignedMembers, createdAt };
         await storage.addService(newService);
         res.json(newService);
     } catch (err) {
@@ -573,8 +750,11 @@ app.use((err, req, res, next) => {
     });
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ LuminaSync API running on http://localhost:${PORT}`);
-});
+// In local dev: start HTTP server. In Vercel: just export the handler.
+if (process.env.VERCEL !== '1') {
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`✅ LuminaSync API running on http://localhost:${PORT}`);
+    });
+}
 
 export default app;

@@ -18,11 +18,17 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
 
     const templateServices = services.filter(s => s.templateId === templateId);
 
-    const handleAssign = (memberId, memberName, serviceDate, serviceType) => {
-        addService(templateId, memberId, memberName, serviceDate, serviceType);
+    const handleAssign = (memberId, memberName, serviceDate, serviceType, assignedMembers, program) => {
+        addService(templateId, memberId, memberName, serviceDate, serviceType, program, assignedMembers);
     };
 
-    // Helper to parse JSON payload inside serviceType
+    const getMembersDisplay = (service) => {
+        if (service.assignedMembers && service.assignedMembers.length > 0) {
+            return service.assignedMembers.map(m => m.name).join(', ');
+        }
+        return service.memberName;
+    };
+
     const parseServiceType = (rawType) => {
         try {
             const parsed = JSON.parse(rawType);
@@ -39,7 +45,6 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
         };
     };
 
-    // Handler to upload photo/video
     const handleAddMedia = async (service, files) => {
         if (!files || files.length === 0) return;
         setUploadingServiceId(service.id);
@@ -56,7 +61,6 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
         const newMedia = [...media];
         for (let file of files) {
             try {
-                // Check file size (recommend limit under 15MB to prevent network delays)
                 if (file.size > 15 * 1024 * 1024) {
                     alert(`El archivo ${file.name} es demasiado grande. Límite máximo: 15MB.`);
                     continue;
@@ -82,7 +86,6 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
         }
     };
 
-    // Handler to remove photo/video
     const handleRemoveMedia = async (service, mediaIndex) => {
         if (!window.confirm('¿Seguro que deseas eliminar esta foto/video?')) return;
         const { type, media } = parseServiceType(service.serviceType);
@@ -95,6 +98,76 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
             alert(`Error al eliminar multimedia: ${err.message}`);
         }
     };
+
+    // Date parsing helper to extract month, year, day
+    const getMonthInfo = (dateStr) => {
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+            const parts = dateStr.split('-');
+            const year = parseInt(parts[0], 10);
+            const month = parseInt(parts[1], 10) - 1;
+            const day = parseInt(parts[2], 10);
+            const date = new Date(year, month, day);
+
+            const months = [
+                'Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio',
+                'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'
+            ];
+            const weekdays = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+            
+            return {
+                key: `${year}-${String(month + 1).padStart(2, '0')}`,
+                monthLabel: `${months[month]} ${year}`,
+                dateLabel: `${weekdays[date.getDay()]}, ${day} de ${months[month]}`,
+                sortVal: date.getTime(),
+                rawDate: dateStr
+            };
+        }
+        return {
+            key: 'recurring',
+            monthLabel: 'Semanales / Recurrentes',
+            dateLabel: dateStr,
+            sortVal: 0,
+            rawDate: dateStr
+        };
+    };
+
+    // Group services by month
+    const grouped = {};
+    templateServices.forEach(service => {
+        const info = getMonthInfo(service.serviceDate);
+        if (!grouped[info.key]) {
+            grouped[info.key] = {
+                label: info.monthLabel,
+                sortVal: info.sortVal,
+                services: []
+            };
+        }
+        grouped[info.key].services.push({
+            ...service,
+            dateLabel: info.dateLabel,
+            sortDate: info.sortVal || 0,
+            rawDate: info.rawDate
+        });
+    });
+
+    // Sort month keys
+    const sortedMonthKeys = Object.keys(grouped).sort((a, b) => {
+        if (a === 'recurring') return 1;
+        if (b === 'recurring') return -1;
+        return a.localeCompare(b);
+    });
+
+    // Sort services inside each month
+    sortedMonthKeys.forEach(key => {
+        grouped[key].services.sort((a, b) => {
+            if (key === 'recurring') {
+                const idxA = WEEKDAYS.indexOf(a.serviceDate);
+                const idxB = WEEKDAYS.indexOf(b.serviceDate);
+                return idxA - idxB;
+            }
+            return a.rawDate.localeCompare(b.rawDate);
+        });
+    });
 
     return (
         <div className="animate-fade-in" style={{ padding: '0 0.5rem' }}>
@@ -118,7 +191,7 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                     <p style={{ color: 'var(--text-muted)', marginTop: '0.4rem', fontSize: '0.9rem' }}>
                         {isPoetry 
                             ? 'Planifica y gestiona las salidas, recitales y los ensayos programados para el grupo de poesía.'
-                            : 'Visualiza los turnos semanales de servicio y campañas organizados por días.'}
+                            : 'Visualiza los turnos de servicio y campañas organizados por meses.'}
                     </p>
                 </div>
 
@@ -140,110 +213,39 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                 )}
             </header>
 
-            {/* Grid of Weekday Groups */}
-            <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))',
-                gap: '1.5rem',
-                marginBottom: '3rem'
-            }}>
-                {WEEKDAYS.map(dayName => {
-                    const dayServices = templateServices.filter(s => s.serviceDate === dayName);
-                    const hasCampaign = dayServices.some(s => {
-                        const { type } = parseServiceType(s.serviceType);
-                        return type && type.includes('Campaña');
-                    });
-
-                    return (
-                        <div
-                            key={dayName}
-                            style={{
-                                background: hasCampaign 
-                                    ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.05) 100%)' 
-                                    : 'rgba(15, 23, 42, 0.35)',
-                                borderRadius: '16px',
-                                border: hasCampaign 
-                                    ? '1.5px solid rgba(239, 68, 68, 0.45)' 
-                                    : '1px solid var(--border)',
-                                padding: '1.25rem',
-                                display: 'flex',
-                                flexDirection: 'column',
-                                gap: '1rem',
-                                transition: 'all 0.3s ease',
-                                boxShadow: hasCampaign ? '0 8px 24px rgba(239, 68, 68, 0.15)' : 'none',
-                                position: 'relative',
-                                overflow: 'hidden'
-                            }}
-                        >
-                            {/* Campaign fire glow effect */}
-                            {hasCampaign && (
-                                <div style={{
-                                    position: 'absolute',
-                                    top: '-40px',
-                                    right: '-40px',
-                                    width: '100px',
-                                    height: '100px',
-                                    background: 'rgba(239, 68, 68, 0.25)',
-                                    filter: 'blur(30px)',
-                                    borderRadius: '50%',
-                                    pointerEvents: 'none'
-                                }} />
-                            )}
-
-                            {/* Header of the Day */}
-                            <div style={{
-                                display: 'flex',
-                                justifyContent: 'space-between',
-                                alignItems: 'center',
-                                borderBottom: '1px solid rgba(255,255,255,0.06)',
-                                paddingBottom: '0.75rem'
-                            }}>
+            {/* List of Month Groups */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem', marginBottom: '3rem' }}>
+                {sortedMonthKeys.length === 0 ? (
+                    <div className="glass-panel" style={{ padding: '4rem', textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', border: '1px solid var(--border)' }}>
+                        No hay salidas o servicios planificados aún. ¡Comienza haciendo clic en {isPoetry ? '"Programar Salida"' : '"Asignar Día"'}!
+                    </div>
+                ) : (
+                    sortedMonthKeys.map(monthKey => {
+                        const month = grouped[monthKey];
+                        return (
+                            <div key={monthKey} style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                                 <h3 style={{
                                     margin: 0,
-                                    fontSize: '1.25rem',
-                                    fontWeight: 700,
-                                    color: hasCampaign ? '#fca5a5' : 'var(--text-main)',
+                                    fontSize: '1.3rem',
+                                    fontWeight: 800,
+                                    color: 'var(--primary)',
                                     display: 'flex',
                                     alignItems: 'center',
-                                    gap: '0.5rem'
+                                    gap: '0.5rem',
+                                    paddingBottom: '0.35rem',
+                                    borderBottom: '1.5px solid var(--primary-glow)',
+                                    textTransform: 'uppercase',
+                                    letterSpacing: '0.03em'
                                 }}>
-                                    {dayName}
+                                    <span>📅</span> {month.label}
                                 </h3>
-
-                                {hasCampaign && (
-                                    <span style={{
-                                        background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
-                                        color: '#ffffff',
-                                        fontSize: '0.65rem',
-                                        fontWeight: 800,
-                                        padding: '0.2rem 0.6rem',
-                                        borderRadius: '8px',
-                                        letterSpacing: '0.05em',
-                                        boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
-                                        display: 'inline-flex',
-                                        alignItems: 'center',
-                                        gap: '0.25rem',
-                                        animation: 'pulse 2s infinite'
-                                    }}>
-                                        <Flame size={10} /> CAMPAÑA
-                                    </span>
-                                )}
-                            </div>
-
-                            {/* Servants list for this day */}
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', flex: 1 }}>
-                                {dayServices.length === 0 ? (
-                                    <div style={{
-                                        color: 'var(--text-muted)',
-                                        fontSize: '0.85rem',
-                                        fontStyle: 'italic',
-                                        textAlign: 'center',
-                                        padding: '2rem 1rem'
-                                    }}>
-                                        Sin asignaciones
-                                    </div>
-                                ) : (
-                                    dayServices.map(service => {
+                                
+                                <div style={{
+                                    display: 'grid',
+                                    gridTemplateColumns: 'repeat(auto-fit, minmax(310px, 1fr))',
+                                    gap: '1.5rem'
+                                }}>
+                                    {month.services.map(service => {
                                         const { type, media } = parseServiceType(service.serviceType);
                                         const isServiceCampaign = type && type.includes('Campaña');
 
@@ -251,55 +253,130 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                                             <div
                                                 key={service.id}
                                                 style={{
-                                                    padding: '1rem',
                                                     background: isServiceCampaign 
-                                                        ? 'rgba(239, 68, 68, 0.08)' 
-                                                        : 'rgba(15, 23, 42, 0.5)',
-                                                    borderRadius: '12px',
+                                                        ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.05) 100%)' 
+                                                        : 'rgba(15, 23, 42, 0.35)',
+                                                    borderRadius: '16px',
                                                     border: isServiceCampaign 
-                                                        ? '1px solid rgba(239, 68, 68, 0.2)' 
-                                                        : '1px solid rgba(255,255,255,0.03)',
+                                                        ? '1.5px solid rgba(239, 68, 68, 0.45)' 
+                                                        : '1px solid var(--border)',
+                                                    padding: '1.25rem',
                                                     display: 'flex',
                                                     flexDirection: 'column',
-                                                    gap: '0.75rem',
-                                                    transition: 'all 0.2s',
+                                                    gap: '1rem',
+                                                    position: 'relative',
+                                                    boxShadow: isServiceCampaign ? '0 8px 24px rgba(239, 68, 68, 0.15)' : 'none',
                                                 }}
                                             >
-                                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                                                    <div style={{ flex: 1, marginRight: '0.5rem' }}>
-                                                        <div style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-main)' }}>
-                                                            {service.memberName}
-                                                        </div>
-                                                        {type && (
-                                                            <div style={{
-                                                                fontSize: '0.75rem',
-                                                                color: isServiceCampaign ? '#fca5a5' : 'var(--text-muted)',
-                                                                marginTop: '0.2rem',
-                                                                display: 'flex',
-                                                                alignItems: 'center',
-                                                                gap: '0.25rem'
+                                                {/* Header of the Day inside Card */}
+                                                <div style={{
+                                                    display: 'flex',
+                                                    justifyContent: 'space-between',
+                                                    alignItems: 'center',
+                                                    borderBottom: '1px solid rgba(255,255,255,0.06)',
+                                                    paddingBottom: '0.75rem'
+                                                }}>
+                                                    <span style={{
+                                                        fontSize: '0.9rem',
+                                                        fontWeight: 700,
+                                                        color: isServiceCampaign ? '#fca5a5' : 'var(--primary)',
+                                                    }}>
+                                                        {service.dateLabel}
+                                                    </span>
+
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        {isServiceCampaign && (
+                                                            <span style={{
+                                                                background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+                                                                color: '#ffffff',
+                                                                fontSize: '0.6rem',
+                                                                fontWeight: 800,
+                                                                padding: '0.15rem 0.5rem',
+                                                                borderRadius: '6px',
                                                             }}>
-                                                                {isServiceCampaign && <Flame size={12} />}
-                                                                {type}
-                                                            </div>
+                                                                CAMPAÑA
+                                                            </span>
+                                                        )}
+                                                        {hasEditPermission && (
+                                                            <button
+                                                                className="btn-danger"
+                                                                style={{
+                                                                    padding: '0.35rem',
+                                                                    borderRadius: '6px',
+                                                                    background: 'rgba(239, 68, 68, 0.15)',
+                                                                    border: 'none',
+                                                                    cursor: 'pointer',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center'
+                                                                }}
+                                                                onClick={() => {
+                                                                    if (window.confirm('¿Seguro que deseas eliminar esta asignación?')) {
+                                                                        deleteService(service.id);
+                                                                    }
+                                                                }}
+                                                                title="Eliminar"
+                                                            >
+                                                                <Trash2 size={12} color="#f87171" />
+                                                            </button>
                                                         )}
                                                     </div>
+                                                </div>
 
-                                                    {hasEditPermission && (
-                                                        <button
-                                                            className="btn-danger"
-                                                            style={{
-                                                                padding: '0.45rem',
-                                                                borderRadius: '8px',
-                                                                background: 'rgba(239, 68, 68, 0.15)',
-                                                                border: 'none',
-                                                                cursor: 'pointer'
+                                                {/* Servants / Outings Details */}
+                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                                                    <div style={{ fontWeight: 700, fontSize: '1.05rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                        👥 {getMembersDisplay(service)}
+                                                    </div>
+                                                    {type && (
+                                                        <div style={{
+                                                            fontSize: '0.8rem',
+                                                            color: isServiceCampaign ? '#fca5a5' : 'var(--text-muted)',
+                                                            fontWeight: 600
+                                                        }}>
+                                                            📍 Lugar/Función: {type}
+                                                        </div>
+                                                    )}
+                                                </div>
+
+                                                {/* Program details */}
+                                                <div style={{
+                                                    display: 'flex',
+                                                    flexDirection: 'column',
+                                                    gap: '0.35rem',
+                                                    paddingTop: '0.5rem',
+                                                    borderTop: '1px solid rgba(255,255,255,0.05)'
+                                                }}>
+                                                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>📝 Programa / Actividad</label>
+                                                    {hasEditPermission ? (
+                                                        <textarea
+                                                            className="glass-input"
+                                                            placeholder="Escribe el programa o detalles de la actividad aquí..."
+                                                            rows={3}
+                                                            defaultValue={service.program || ''}
+                                                            onBlur={async (e) => {
+                                                                const text = e.target.value;
+                                                                if (text !== (service.program || '')) {
+                                                                    await updateService(service.id, { program: text });
+                                                                }
                                                             }}
-                                                            onClick={() => deleteService(service.id)}
-                                                            title="Eliminar asignación"
-                                                        >
-                                                            <Trash2 size={14} color="#f87171" />
-                                                        </button>
+                                                            style={{ width: '100%', fontSize: '0.8rem', padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.01)' }}
+                                                        />
+                                                    ) : (
+                                                        <pre style={{
+                                                            margin: 0,
+                                                            padding: '0.5rem',
+                                                            background: 'rgba(0,0,0,0.15)',
+                                                            borderRadius: '8px',
+                                                            fontSize: '0.8rem',
+                                                            color: 'var(--text-main)',
+                                                            whiteSpace: 'pre-wrap',
+                                                            fontFamily: 'inherit',
+                                                            maxHeight: '120px',
+                                                            overflowY: 'auto'
+                                                        }}>
+                                                            {service.program || 'Sin detalles del programa.'}
+                                                        </pre>
                                                     )}
                                                 </div>
 
@@ -312,7 +389,6 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                                                         paddingTop: '0.5rem',
                                                         borderTop: '1px solid rgba(255,255,255,0.05)'
                                                     }}>
-                                                        {/* Visual Grid of media */}
                                                         {media.length > 0 && (
                                                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                                 {media.map((item, idx) => (
@@ -369,7 +445,6 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                                                             </div>
                                                         )}
 
-                                                        {/* Action to Upload */}
                                                         {hasEditPermission && (
                                                             <label style={{
                                                                 display: 'inline-flex',
@@ -403,15 +478,15 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                                                 )}
                                             </div>
                                         );
-                                    })
-                                )}
+                                    })}
+                                </div>
                             </div>
-                        </div>
-                    );
-                })}
+                        );
+                    })
+                )}
             </div>
 
-            {/* Full-Screen Media Modal */}
+            {/* Media full screen viewer */}
             {fullScreenMedia && (
                 <div style={{
                     position: 'fixed',
@@ -419,36 +494,17 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                     left: 0,
                     width: '100vw',
                     height: '100vh',
-                    background: 'rgba(15, 23, 42, 0.95)',
+                    background: 'rgba(0,0,0,0.95)',
                     zIndex: 9999,
                     display: 'flex',
+                    flexDirection: 'column',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    flexDirection: 'column',
-                    padding: '2rem',
-                    backdropFilter: 'blur(20px)'
+                    padding: '2rem'
                 }} onClick={() => setFullScreenMedia(null)}>
-                    <button style={{
-                        position: 'absolute',
-                        top: '20px',
-                        right: '20px',
-                        background: 'rgba(255,255,255,0.05)',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        color: 'white',
-                        fontSize: '1.25rem',
-                        cursor: 'pointer',
-                        borderRadius: '50%',
-                        width: '40px',
-                        height: '40px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontWeight: '700'
-                    }}>×</button>
-
-                    <div style={{ maxWidth: '85vw', maxHeight: '75vh', display: 'flex', alignItems: 'center', justifyContent: 'center' }} onClick={(e) => e.stopPropagation()}>
+                    <div style={{ maxWidth: '90%', maxHeight: '80%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                         {fullScreenMedia.type === 'video' ? (
-                            <video src={fullScreenMedia.data} controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }} />
+                            <video src={fullScreenMedia.data} controls autoPlay style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '16px', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }} onClick={(e) => e.stopPropagation()} />
                         ) : (
                             <img src={fullScreenMedia.data} alt={fullScreenMedia.name} style={{ maxWidth: '100%', maxHeight: '100%', borderRadius: '16px', objectFit: 'contain', boxShadow: '0 20px 50px rgba(0,0,0,0.5)' }} />
                         )}
@@ -462,6 +518,7 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
             <AssignServiceModal
                 isOpen={isAssignModalOpen}
                 onClose={() => setIsAssignModalOpen(false)}
+                templateId={templateId}
                 members={members}
                 onAssign={handleAssign}
             />

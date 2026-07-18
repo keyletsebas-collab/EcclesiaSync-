@@ -9,7 +9,7 @@ import supabase from './supabase.js';
 // Map JS object to Supabase row (camelCase -> snake_case)
 function userToRow(user) {
     if (!user) return null;
-    return {
+    const row = {
         uid: user.uid,
         username: user.username,
         password: user.password,
@@ -19,11 +19,33 @@ function userToRow(user) {
         is_blocked: user.isBlocked,
         memberships: user.memberships
     };
+    if (user.birthday !== undefined && user.birthday !== null) {
+        row.birthday = user.birthday;
+    }
+    if (user.address !== undefined && user.address !== null) {
+        row.address = user.address;
+    }
+    return row;
 }
 
 // Map Supabase row to JS object (snake_case -> camelCase)
 function userToObj(row) {
     if (!row) return null;
+    let memberships = typeof row.memberships === 'string' ? JSON.parse(row.memberships) : row.memberships || [];
+    
+    // Self-healing: if any membership is missing fullName or phone, recover it from others
+    const profile = memberships.find(m => m.fullName) || {};
+    const commonName = profile.fullName || row.username;
+    const commonPhone = profile.phone || '';
+    const commonEmail = profile.email || row.username;
+    
+    memberships = memberships.map(m => ({
+        ...m,
+        fullName: m.fullName || commonName,
+        phone: m.phone || commonPhone,
+        email: m.email || commonEmail
+    }));
+
     return {
         uid: row.uid,
         username: row.username,
@@ -32,7 +54,9 @@ function userToObj(row) {
         accountId: row.account_id,
         createdAt: row.created_at,
         isBlocked: row.is_blocked,
-        memberships: typeof row.memberships === 'string' ? JSON.parse(row.memberships) : row.memberships || []
+        memberships,
+        birthday: row.birthday,
+        address: row.address
     };
 }
 
@@ -96,7 +120,9 @@ function serviceToRow(service) {
         member_name: service.memberName,
         service_date: service.serviceDate,
         service_type: service.serviceType,
-        created_at: service.createdAt
+        created_at: service.createdAt,
+        program: service.program,
+        assigned_members: service.assignedMembers
     };
 }
 
@@ -110,9 +136,63 @@ function serviceToObj(row) {
         memberName: row.member_name,
         serviceDate: row.service_date,
         serviceType: row.service_type,
+        createdAt: row.created_at,
+        program: row.program,
+        assignedMembers: typeof row.assigned_members === 'string' ? JSON.parse(row.assigned_members) : row.assigned_members || []
+    };
+}
+
+function transactionToRow(tx) {
+    if (!tx) return null;
+    return {
+        id: tx.id,
+        template_id: tx.templateId,
+        account_id: tx.accountId,
+        type: tx.type,
+        amount: parseFloat(tx.amount),
+        description: tx.description,
+        date: tx.date
+    };
+}
+
+function transactionToObj(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        accountId: row.account_id,
+        type: row.type,
+        amount: parseFloat(row.amount),
+        description: row.description,
+        date: row.date,
         createdAt: row.created_at
     };
 }
+
+function programToRow(program) {
+    if (!program) return null;
+    return {
+        id: program.id,
+        template_id: program.templateId,
+        account_id: program.accountId,
+        title: program.title,
+        content: program.content,
+        created_at: program.createdAt
+    };
+}
+
+function programToObj(row) {
+    if (!row) return null;
+    return {
+        id: row.id,
+        templateId: row.template_id,
+        accountId: row.account_id,
+        title: row.title,
+        content: row.content,
+        createdAt: row.created_at
+    };
+}
+
 
 // ─── Storage API ─────────────────────────────────────────────────────────────
 
@@ -147,6 +227,8 @@ export const storage = {
         if (updates.accountId !== undefined) rowUpdates.account_id = updates.accountId;
         if (updates.isBlocked !== undefined) rowUpdates.is_blocked = updates.isBlocked;
         if (updates.memberships !== undefined) rowUpdates.memberships = updates.memberships;
+        if (updates.birthday !== undefined) rowUpdates.birthday = updates.birthday;
+        if (updates.address !== undefined) rowUpdates.address = updates.address;
 
         const { error } = await supabase.from('users').update(rowUpdates).eq('uid', uid);
         if (error) {
@@ -293,6 +375,8 @@ export const storage = {
         if (updates.memberName !== undefined) rowUpdates.member_name = updates.memberName;
         if (updates.serviceDate !== undefined) rowUpdates.service_date = updates.serviceDate;
         if (updates.serviceType !== undefined) rowUpdates.service_type = updates.serviceType;
+        if (updates.program !== undefined) rowUpdates.program = updates.program;
+        if (updates.assignedMembers !== undefined) rowUpdates.assigned_members = updates.assignedMembers;
 
         const { error } = await supabase.from('services').update(rowUpdates).eq('id', id);
         if (error) {
@@ -305,6 +389,75 @@ export const storage = {
         const { error } = await supabase.from('services').delete().eq('id', id);
         if (error) {
             console.error(`Error deleting service ${id}:`, error);
+            throw error;
+        }
+    },
+
+    // ── Transactions ─────────────────────────────────────────────────────────
+
+    getTransactions: async (templateId) => {
+        let query = supabase.from('transactions').select('*');
+        if (templateId) {
+            query = query.eq('template_id', templateId);
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error('Error fetching transactions:', error);
+            return [];
+        }
+        return data.map(transactionToObj);
+    },
+
+    addTransaction: async (tx) => {
+        const row = transactionToRow(tx);
+        const { error } = await supabase.from('transactions').insert([row]);
+        if (error) {
+            console.error('Error adding transaction:', error);
+            throw error;
+        }
+        return tx;
+    },
+
+    deleteTransaction: async (id) => {
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting transaction ${id}:`, error);
+            throw error;
+        }
+    },
+
+    // ── Programs ─────────────────────────────────────────────────────────────
+
+    getPrograms: async (templateId, accountId) => {
+        let query = supabase.from('programs').select('*');
+        if (templateId) {
+            query = query.eq('template_id', templateId);
+        }
+        if (accountId) {
+            query = query.eq('account_id', accountId);
+        }
+        const { data, error } = await query;
+        if (error) {
+            console.error('Error fetching programs:', error);
+            return [];
+        }
+        return data.map(programToObj);
+    },
+
+    addProgram: async (program) => {
+        const row = programToRow(program);
+        const { error } = await supabase.from('programs').insert([row]);
+        if (error) {
+            console.error('Error adding program:', error);
+            throw error;
+        }
+        return program;
+    },
+
+    deleteProgram: async (id) => {
+        const { error } = await supabase.from('programs').delete().eq('id', id);
+        if (error) {
+            console.error(`Error deleting program ${id}:`, error);
             throw error;
         }
     }

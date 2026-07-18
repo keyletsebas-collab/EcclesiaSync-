@@ -2,27 +2,35 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 
 const AuthContext = createContext();
 
+// Production URL on Vercel — update this if your Vercel domain changes
+const VERCEL_PRODUCTION_URL = 'https://churchmanager-six.vercel.app';
+
 const getApiUrl = () => {
     if (typeof window === 'undefined') return 'http://127.0.0.1:3001';
 
-    // If it's a web host (Vercel, etc.)
-    if (window.location.hostname && 
-        window.location.hostname !== 'localhost' && 
-        window.location.hostname !== '127.0.0.1' && 
-        window.location.hostname !== '10.0.2.2' &&
-        !window.location.protocol.startsWith('file')) {
+    // Capacitor (Android/iOS native WebView) — always use production Vercel URL
+    if (
+        window.Capacitor ||
+        window.location.protocol === 'capacitor:' ||
+        window.location.protocol === 'ionic:' ||
+        (window.location.hostname === 'localhost' && /Android|iPhone|iPad/i.test(window.navigator?.userAgent || ''))
+    ) {
+        return VERCEL_PRODUCTION_URL;
+    }
+
+    // Deployed on Vercel or any real web host — use same-origin (relative API calls)
+    if (
+        window.location.hostname &&
+        window.location.hostname !== 'localhost' &&
+        window.location.hostname !== '127.0.0.1' &&
+        !window.location.hostname.startsWith('192.168.')
+    ) {
         return window.location.origin;
     }
 
-    // Android WebView check
-    if (window.navigator && /Android/i.test(window.navigator.userAgent)) {
-        if (window.location.hostname === '10.0.2.2') {
-            return 'http://10.0.2.2:3001';
-        }
-        return 'http://127.0.0.1:3001';
-    }
-
-    return 'http://127.0.0.1:3001';
+    // Local development fallback
+    const hostname = window.location.hostname || '127.0.0.1';
+    return `http://${hostname}:3001`;
 };
 
 const API_URL = getApiUrl();
@@ -68,6 +76,37 @@ export const AuthProvider = ({ children }) => {
         }
     }, [activeAccountId]);
 
+    // Refresh user profile/memberships on mount to keep roles and accounts in sync
+    useEffect(() => {
+        const refreshUser = async () => {
+            if (!currentUser) return;
+            try {
+                const response = await fetch(`${API_URL}/api/auth/users/${currentUser.uid}`);
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.user) {
+                        const userObj = {
+                            uid: data.user.uid,
+                            username: data.user.username,
+                            isMaster: data.user.isMaster,
+                            accountId: data.user.accountId,
+                            memberships: data.user.memberships || [],
+                            birthday: data.user.birthday,
+                            address: data.user.address
+                        };
+                        setCurrentUser(userObj);
+                    }
+                }
+            } catch (err) {
+                console.error('Failed to refresh user on mount:', err);
+            }
+        };
+        refreshUser();
+        if (currentUser) {
+            fetchUsers();
+        }
+    }, [currentUser?.uid]);
+
     // Validation: Ensure activeAccountId is always one of the user's memberships
     useEffect(() => {
         if (currentUser && activeAccountId) {
@@ -109,7 +148,9 @@ export const AuthProvider = ({ children }) => {
                     username: data.username,
                     isMaster: data.isMaster,
                     accountId: data.accountId,
-                    memberships: data.memberships || []
+                    memberships: data.memberships || [],
+                    birthday: data.birthday,
+                    address: data.address
                 };
                 setCurrentUser(user);
                 setActiveAccountId(data.accountId);
@@ -137,7 +178,9 @@ export const AuthProvider = ({ children }) => {
                     username: data.username,
                     isMaster: data.isMaster,
                     accountId: data.accountId,
-                    memberships: data.memberships || []
+                    memberships: data.memberships || [],
+                    birthday: data.birthday,
+                    address: data.address
                 };
                 setCurrentUser(user);
                 // Default to their primary account but prioritize saved active account
@@ -253,6 +296,27 @@ export const AuthProvider = ({ children }) => {
         return membership?.role === 'master' || membership?.role === 'editor';
     };
 
+    const updateProfile = async (birthday, address) => {
+        if (!currentUser) return { success: false, error: 'Not logged in' };
+        try {
+            const response = await fetch(`${API_URL}/api/auth/profile`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ uid: currentUser.uid, birthday, address })
+            });
+            const data = await response.json();
+            if (data.success) {
+                const updatedUser = { ...currentUser, birthday, address };
+                setCurrentUser(updatedUser);
+                return { success: true };
+            }
+            return { success: false, error: data.error };
+        } catch (err) {
+            console.error('Update profile error:', err);
+            return { success: false, error: 'Connection error' };
+        }
+    };
+
     const value = {
         currentUser,
         activeAccountId,
@@ -269,7 +333,8 @@ export const AuthProvider = ({ children }) => {
         updateUserRole,
         toggleBlockUser,
         deleteUser,
-        fetchUsers
+        fetchUsers,
+        updateProfile
     };
 
     return (

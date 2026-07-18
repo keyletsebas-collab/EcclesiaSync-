@@ -9,7 +9,7 @@ import ServicesView from './ServicesView';
 
 const TemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
-    const { currentUser, canEdit } = useAuth();
+    const { currentUser, canEdit, users } = useAuth();
     const { t } = useLanguage();
 
     const template = templates.find(t => t.id === templateId);
@@ -21,6 +21,26 @@ const TemplateView = ({ templateId, onDeleted }) => {
     const isPoetry = template?.customFields?.includes('__poetry__');
     const isSonido = template?.customFields?.includes('__sonido__');
     const isAlreadyMember = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName?.toLowerCase().trim());
+
+    const getMemberColor = (name) => {
+        if (!name) return 'var(--text-main)';
+        const mName = name.toLowerCase().trim();
+        const matchingUser = users?.find(u => {
+            if (u.username?.toLowerCase().trim() === mName) return true;
+            const membership = u.memberships?.find(m => m.id === template?.accountId);
+            return membership?.fullName?.toLowerCase().trim() === mName;
+        });
+
+        if (!matchingUser) return '#9ca3af'; // Viewer (Gris) por defecto
+        if (matchingUser.username?.toLowerCase() === 'keylet') return '#fbbf24'; // Dorado
+
+        const membership = matchingUser.memberships?.find(m => m.id === template?.accountId);
+        const role = membership?.role || 'viewer';
+
+        if (role === 'master') return '#fbbf24'; // Dorado
+        if (role === 'editor') return '#ef4444'; // Rojo
+        return '#9ca3af'; // Viewer (Gris)
+    };
 
     if (!template) {
         return (
@@ -105,6 +125,12 @@ const TemplateView = ({ templateId, onDeleted }) => {
 
     const handleAddMember = async (e) => {
         e.preventDefault();
+        const nameTrimmed = newMember.name?.trim().toLowerCase();
+        const exists = templateMembers.some(m => m.name?.trim().toLowerCase() === nameTrimmed);
+        if (exists) {
+            alert(isPoetry ? 'Ya existe una poesía con este título.' : 'Ya existe un miembro con este nombre en esta plantilla.');
+            return;
+        }
         await addMember(templateId, newMember);
         setIsAddMemberOpen(false);
         setNewMember({ name: '', number: '', phone: '', isLeader: false, identifications: {} });
@@ -186,7 +212,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             className="btn btn-primary"
                             onClick={() => setIsAddMemberOpen(true)}
                         >
-                            <UserPlus size={18} /> {t('addMember')}
+                            <UserPlus size={18} /> {isPoetry ? 'Añadir Poesía' : t('addMember')}
                         </button>
                     )}
                     {canEdit ? (
@@ -212,7 +238,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
             </header>
 
             {isAlreadyMember ? (
-                currentUser?.username?.toLowerCase() === 'keylet' || isSonido ? (
+                true ? (
                     <>
                         {/* Tabs Navigation */}
             <div style={{
@@ -296,6 +322,42 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         👥 Usuarios
                     </button>
                 )}
+                <button
+                    onClick={() => setActiveTab('finances')}
+                    style={{
+                        background: activeTab === 'finances' ? 'var(--primary-glow)' : 'transparent',
+                        border: 'none',
+                        color: activeTab === 'finances' ? '#fff' : 'var(--text-muted)',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: 'var(--radius)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}
+                >
+                    💵 Finanzas
+                </button>
+                <button
+                    onClick={() => setActiveTab('programs')}
+                    style={{
+                        background: activeTab === 'programs' ? 'var(--primary-glow)' : 'transparent',
+                        border: 'none',
+                        color: activeTab === 'programs' ? '#fff' : 'var(--text-muted)',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: 'var(--radius)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        transition: 'all 0.2s',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem'
+                    }}
+                >
+                    📖 Programas
+                </button>
             </div>
 
             {activeTab === 'members' ? (
@@ -318,8 +380,8 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                 ) : (
                                     <>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Título Sugerido</label>
-                                            <input className="glass-input" value={aiTitle} onChange={e => setAiTitle(e.target.value)} />
+                                            <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Nombre de la Poesía *</label>
+                                            <input className="glass-input" value={aiTitle} onChange={e => setAiTitle(e.target.value)} placeholder="Ej: Mi Dulce Hogar" />
                                         </div>
                                         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
                                             <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Texto Extraído y Formateado</label>
@@ -329,6 +391,12 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                             <button className="btn" onClick={() => { setShowAiPanel(false); setAiResult(''); setAiTitle(''); }}>Descartar</button>
                                             <button className="btn btn-primary" onClick={async () => {
                                                 if (!aiTitle.trim() || !aiResult.trim()) return;
+                                                const titleTrimmed = aiTitle.trim().toLowerCase();
+                                                const exists = templateMembers.some(m => m.name?.trim().toLowerCase() === titleTrimmed);
+                                                if (exists) {
+                                                    alert(isPoetry ? 'Ya existe una poesía con este título.' : 'Ya existe un miembro con este nombre.');
+                                                    return;
+                                                }
                                                 await addMember(templateId, {
                                                     name: aiTitle.trim(),
                                                     phone: currentUser?.username || 'Anónimo',
@@ -554,7 +622,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                     </tr>
                                 ) : filteredMembers.map(member => (
                                     <tr key={member.id}>
-                                        <td style={{ fontWeight: 500, color: 'var(--text-main)' }}>
+                                        <td style={{ fontWeight: 600, color: getMemberColor(member.name) }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                 {member.name}
                                                 {member.isLeader && (
@@ -1014,32 +1082,58 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                                 padding: '1.25rem',
                                                 display: 'flex',
                                                 alignItems: 'center',
+                                                justifyContent: 'space-between',
                                                 gap: '0.75rem',
                                                 background: isSelf ? 'rgba(251, 191, 36, 0.05)' : 'rgba(255,255,255,0.02)',
                                                 border: '1px solid ' + (isSelf ? 'rgba(251, 191, 36, 0.3)' : 'var(--border)'),
                                                 borderRadius: '12px'
                                             }}>
-                                                <div style={{
-                                                    width: '40px',
-                                                    height: '40px',
-                                                    borderRadius: '50%',
-                                                    background: isSelf ? 'rgba(251, 191, 36, 0.15)' : 'var(--border)',
-                                                    display: 'flex',
-                                                    alignItems: 'center',
-                                                    justifyContent: 'center',
-                                                    fontWeight: 'bold',
-                                                    color: isSelf ? '#fbbf24' : 'var(--text-muted)'
-                                                }}>
-                                                    {part.name ? part.name.substring(0, 2).toUpperCase() : 'U'}
+                                                <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                    <div style={{
+                                                        width: '40px',
+                                                        height: '40px',
+                                                        borderRadius: '50%',
+                                                        background: isSelf ? 'rgba(251, 191, 36, 0.15)' : 'var(--border)',
+                                                        display: 'flex',
+                                                        alignItems: 'center',
+                                                        justifyContent: 'center',
+                                                        fontWeight: 'bold',
+                                                        color: isSelf ? '#fbbf24' : 'var(--text-muted)'
+                                                    }}>
+                                                        {part.name ? part.name.substring(0, 2).toUpperCase() : 'U'}
+                                                    </div>
+                                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
+                                                        <span style={{ fontSize: '0.9rem', fontWeight: 600, color: getMemberColor(part.name) }}>
+                                                            {part.name} {isSelf && '(Tú)'}
+                                                        </span>
+                                                        <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                                            ID: #{part.number} {part.phone && `• ${part.phone}`}
+                                                        </span>
+                                                    </div>
                                                 </div>
-                                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.15rem' }}>
-                                                    <span style={{ fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>
-                                                        {part.name} {isSelf && '(Tú)'}
-                                                    </span>
-                                                    <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                                                        ID: #{part.number} {part.phone && `• ${part.phone}`}
-                                                    </span>
-                                                </div>
+                                                {(isSelf || currentUser?.isMaster || activeMembership?.role === 'master' || activeMembership?.role === 'editor') && (
+                                                    <button
+                                                        onClick={async (e) => {
+                                                            e.stopPropagation();
+                                                            if (window.confirm('¿Seguro que deseas eliminar a este usuario de la plantilla?')) {
+                                                                await deleteMember(part.id);
+                                                            }
+                                                        }}
+                                                        style={{
+                                                            background: 'transparent',
+                                                            border: 'none',
+                                                            color: 'var(--text-muted)',
+                                                            cursor: 'pointer',
+                                                            padding: '0.25rem',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            justifyContent: 'center'
+                                                        }}
+                                                        title="Eliminar usuario"
+                                                    >
+                                                        <Trash2 size={14} color="#f87171" />
+                                                    </button>
+                                                )}
                                             </div>
                                         );
                                     })}
@@ -1048,6 +1142,10 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         </div>
                     );
                 })()
+            ) : activeTab === 'programs' ? (
+                <ProgramsView templateId={templateId} accountId={template.accountId} isTemplateEditor={currentUser?.isMaster || activeMembership?.role === 'master' || activeMembership?.role === 'editor'} />
+            ) : activeTab === 'finances' ? (
+                <FinancesView templateId={templateId} accountId={template.accountId} isTemplateAdmin={currentUser?.isMaster || activeMembership?.role === 'master'} />
             ) : (
                 <ServicesView templateId={templateId} members={templateMembers} isPoetry={isPoetry} isSonido={isSonido} />
             )}
@@ -1119,6 +1217,12 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             boxShadow: '0 4px 15px rgba(251, 191, 36, 0.2)'
                         }}
                         onClick={async () => {
+                            const nameTrimmed = currentUserFullName?.trim().toLowerCase();
+                            const exists = templateMembers.some(m => m.name?.trim().toLowerCase() === nameTrimmed);
+                            if (exists) {
+                                alert('Ya formas parte de esta plantilla.');
+                                return;
+                            }
                             const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
                             const nextNumber = maxNumber + 1;
                             
@@ -1155,6 +1259,12 @@ const TemplateView = ({ templateId, onDeleted }) => {
                     <form onSubmit={async (e) => {
                         e.preventDefault();
                         if (!newPoemTitle.trim() || !newPoemContent.trim()) return;
+                        const titleTrimmed = newPoemTitle.trim().toLowerCase();
+                        const exists = templateMembers.some(m => m.name?.trim().toLowerCase() === titleTrimmed);
+                        if (exists) {
+                            alert(isPoetry ? 'Ya existe una poesía con este título.' : 'Ya existe un miembro con este nombre.');
+                            return;
+                        }
                         await addMember(templateId, {
                             name: newPoemTitle.trim(),
                             phone: newPoemAuthor.trim() || 'Anónimo',
@@ -1375,12 +1485,344 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                 {t('cancel')}
                             </button>
                             <button type="submit" className="btn btn-primary">
-                                {t('addMember')}
+                                {isPoetry ? 'Añadir Poesía' : t('addMember')}
                             </button>
                         </div>
                     </form>
                 )}
             </Modal>
+        </div>
+    );
+};
+
+const ProgramsView = ({ templateId, accountId, isTemplateEditor }) => {
+    const { programs, addProgram, deleteProgram } = useStorage();
+    const [title, setTitle] = useState('');
+    const [content, setContent] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
+
+    const templatePrograms = (programs || []).filter(p => p.templateId === templateId);
+
+    const filteredPrograms = templatePrograms.filter(p => 
+        p.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        p.content.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+
+    const handleSubmit = async (e) => {
+        e.preventDefault();
+        if (!title.trim() || !content.trim()) return;
+        await addProgram(templateId, { title: title.trim(), content: content.trim() });
+        setTitle('');
+        setContent('');
+    };
+
+    return (
+        <div className="animate-fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', flexWrap: 'wrap' }}>
+                <input
+                    type="text"
+                    className="glass-input"
+                    placeholder="🔍 Buscar programas..."
+                    value={searchTerm}
+                    onChange={e => setSearchTerm(e.target.value)}
+                    style={{ flex: 1, minWidth: '200px', maxWidth: '400px' }}
+                />
+            </div>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '2rem', alignItems: 'start' }}>
+                {isTemplateEditor && (
+                    <div className="glass-panel" style={{ padding: '1.5rem', border: '1px solid var(--border)' }}>
+                        <h3 style={{ margin: '0 0 1.25rem 0', display: 'flex', alignItems: 'center', gap: '0.5rem', color: 'var(--text-main)', fontSize: '1.25rem' }}>
+                            ✍️ Crear Nuevo Programa
+                        </h3>
+                        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Título del Programa</label>
+                                <input
+                                    type="text"
+                                    className="glass-input"
+                                    placeholder="Ej: Culto de Jóvenes, Programa Campaña de Agosto"
+                                    value={title}
+                                    onChange={e => setTitle(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
+                                <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)', fontWeight: 600 }}>Detalle/Pasos del Programa</label>
+                                <textarea
+                                    className="glass-input"
+                                    placeholder="Escribe el orden del servicio o actividades paso a paso..."
+                                    value={content}
+                                    onChange={e => setContent(e.target.value)}
+                                    rows={8}
+                                    required
+                                    style={{ fontFamily: 'monospace', lineHeight: '1.5', fontSize: '0.9rem' }}
+                                />
+                            </div>
+                            <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end', padding: '0.6rem 1.5rem' }}>
+                                Guardar Programa
+                            </button>
+                        </form>
+                    </div>
+                )}
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        📋 Programas Guardados ({filteredPrograms.length})
+                    </h3>
+                    {filteredPrograms.length === 0 ? (
+                        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic' }}>
+                            No hay programas registrados
+                        </div>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: '1rem' }}>
+                            {filteredPrograms.map(prog => (
+                                <div key={prog.id} className="glass-panel" style={{ padding: '1.25rem', border: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem', position: 'relative' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                                        <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{prog.title}</h4>
+                                        {isTemplateEditor && (
+                                            <button
+                                                onClick={() => {
+                                                    if (window.confirm('¿Seguro que deseas eliminar este programa?')) {
+                                                        deleteProgram(prog.id);
+                                                    }
+                                                }}
+                                                style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.2rem' }}
+                                                title="Eliminar"
+                                            >
+                                                <Trash2 size={16} />
+                                            </button>
+                                        )}
+                                    </div>
+                                    <pre style={{
+                                        margin: 0,
+                                        padding: '0.75rem',
+                                        background: 'rgba(0,0,0,0.2)',
+                                        borderRadius: '8px',
+                                        fontSize: '0.85rem',
+                                        color: '#cbd5e1',
+                                        fontFamily: 'var(--font-mono)',
+                                        whiteSpace: 'pre-wrap',
+                                        overflowX: 'auto',
+                                        maxHeight: '200px',
+                                        overflowY: 'auto'
+                                    }}>
+                                        {prog.content}
+                                    </pre>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const FinancesView = ({ templateId, accountId, isTemplateAdmin }) => {
+    const [transactions, setTransactions] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [description, setDescription] = useState('');
+    const [amount, setAmount] = useState('');
+    const [type, setType] = useState('income'); // 'income' or 'expense'
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const { currentUser } = useAuth();
+
+    const fetchTransactions = async () => {
+        setLoading(true);
+        try {
+            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
+            const response = await fetch(`${apiHost}/api/transactions?templateId=${templateId}`, {
+                headers: {
+                    'X-User-Uid': currentUser?.uid || ''
+                }
+            });
+            const data = await response.json();
+            if (Array.isArray(data)) {
+                setTransactions(data);
+            }
+        } catch (err) {
+            console.error('Failed to fetch transactions:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    React.useEffect(() => {
+        fetchTransactions();
+    }, [templateId]);
+
+    const handleAdd = async (e) => {
+        e.preventDefault();
+        if (!description.trim() || !amount) return;
+        try {
+            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
+            const res = await fetch(`${apiHost}/api/transactions`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    templateId,
+                    accountId,
+                    type,
+                    amount: parseFloat(amount),
+                    description: description.trim(),
+                    date,
+                    uid: currentUser?.uid
+                })
+            });
+            if (res.ok) {
+                setDescription('');
+                setAmount('');
+                fetchTransactions();
+            } else {
+                const errData = await res.json();
+                alert('Error al agregar: ' + errData.error);
+            }
+        } catch (err) {
+            alert('Error de conexión');
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('¿Seguro que deseas eliminar esta transacción?')) return;
+        try {
+            const apiHost = typeof window !== 'undefined' && window.location.hostname && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1' && window.location.hostname !== '10.0.2.2' && !window.location.protocol.startsWith('file') ? window.location.origin : 'http://127.0.0.1:3001';
+            const res = await fetch(`${apiHost}/api/transactions/${id}?uid=${currentUser?.uid}`, {
+                method: 'DELETE'
+            });
+            if (res.ok) {
+                fetchTransactions();
+            } else {
+                const errData = await res.json();
+                alert('Error al eliminar: ' + errData.error);
+            }
+        } catch (err) {
+            alert('Error de conexión');
+        }
+    };
+
+    const totalIncome = transactions.filter(t => t.type === 'income').reduce((sum, t) => sum + t.amount, 0);
+    const totalExpense = transactions.filter(t => t.type === 'expense').reduce((sum, t) => sum + t.amount, 0);
+    const balance = totalIncome - totalExpense;
+
+    return (
+        <div className="glass-panel animate-fade-in" style={{ padding: '2rem' }}>
+            <h3 style={{ margin: 0, marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                💵 Control de Ingresos y Egresos
+            </h3>
+
+            {/* Balances widgets */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
+                <div style={{ padding: '1.25rem', background: 'rgba(34, 197, 94, 0.08)', border: '1px solid rgba(34, 197, 94, 0.2)', borderRadius: '16px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Ingresos Totales</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#22c55e' }}>${totalIncome.toFixed(2)}</span>
+                </div>
+                <div style={{ padding: '1.25rem', background: 'rgba(239, 68, 68, 0.08)', border: '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '16px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Egresos Totales</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: '#ef4444' }}>${totalExpense.toFixed(2)}</span>
+                </div>
+                <div style={{ padding: '1.25rem', background: balance >= 0 ? 'rgba(99, 102, 241, 0.08)' : 'rgba(239, 68, 68, 0.08)', border: balance >= 0 ? '1px solid rgba(99, 102, 241, 0.2)' : '1px solid rgba(239, 68, 68, 0.2)', borderRadius: '16px' }}>
+                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Balance Neto</span>
+                    <span style={{ fontSize: '1.5rem', fontWeight: 700, color: balance >= 0 ? 'var(--primary)' : '#ef4444' }}>${balance.toFixed(2)}</span>
+                </div>
+            </div>
+
+            {/* Admin Add Transaction Form */}
+            {isTemplateAdmin ? (
+                <form onSubmit={handleAdd} className="glass-panel" style={{ padding: '1.25rem', marginBottom: '2rem', display: 'flex', flexDirection: 'column', gap: '1rem', background: 'rgba(255,255,255,0.01)' }}>
+                    <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600 }}>Agregar Nueva Transacción</h4>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: '1rem' }}>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Descripción</label>
+                            <input
+                                type="text"
+                                className="glass-input"
+                                placeholder="Ej: Ofrenda, Compra de cables"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Monto ($)</label>
+                            <input
+                                type="number"
+                                step="0.01"
+                                className="glass-input"
+                                placeholder="0.00"
+                                value={amount}
+                                onChange={(e) => setAmount(e.target.value)}
+                                required
+                            />
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Tipo</label>
+                            <select
+                                className="glass-input"
+                                value={type}
+                                onChange={(e) => setType(e.target.value)}
+                            >
+                                <option value="income">Ingreso</option>
+                                <option value="expense">Egreso</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Fecha</label>
+                            <input
+                                type="date"
+                                className="glass-input"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                required
+                            />
+                        </div>
+                    </div>
+                    <button type="submit" className="btn btn-primary" style={{ alignSelf: 'flex-end', padding: '0.5rem 1.5rem', fontSize: '0.875rem' }}>
+                        Guardar Transacción
+                    </button>
+                </form>
+            ) : (
+                <div style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '10px', marginBottom: '2rem', border: '1px solid var(--border)', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                    ℹ️ Solo los administradores pueden añadir o eliminar transacciones financieras.
+                </div>
+            )}
+
+            {/* Transactions List */}
+            <h4 style={{ margin: 0, marginBottom: '1rem', fontSize: '1rem' }}>Historial de Movimientos</h4>
+            {loading ? (
+                <p style={{ color: 'var(--text-muted)' }}>Cargando transacciones...</p>
+            ) : transactions.length === 0 ? (
+                <p style={{ color: 'var(--text-muted)', textAlign: 'center', padding: '2rem 0' }}>No hay transacciones registradas.</p>
+            ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    {transactions.map(tx => (
+                        <div key={tx.id} style={{
+                            padding: '1rem',
+                            background: 'var(--bg-glass)',
+                            borderRadius: '12px',
+                            border: '1px solid var(--border)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center'
+                        }}>
+                            <div>
+                                <span style={{ fontWeight: 600, fontSize: '0.9rem', display: 'block' }}>{tx.description}</span>
+                                <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>{tx.date}</span>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <span style={{ fontWeight: 700, fontSize: '1rem', color: tx.type === 'income' ? '#22c55e' : '#ef4444' }}>
+                                    {tx.type === 'income' ? '+' : '-'}${tx.amount.toFixed(2)}
+                                </span>
+                                {isTemplateAdmin && (
+                                    <button onClick={() => handleDelete(tx.id)} className="btn-danger" style={{ padding: '0.4rem', borderRadius: '6px' }}>
+                                        <Trash2 size={12} />
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };

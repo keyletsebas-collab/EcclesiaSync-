@@ -17,7 +17,7 @@ function App() {
   const { addTemplate } = useStorage();
   const { t } = useLanguage();
   const [activeTemplateId, setActiveTemplateId] = useState(null);
-  const [activeView, setActiveView] = useState('templates'); // 'templates' or 'admins'
+  const [activeView, setActiveView] = useState('history'); // 'history', 'templates' or 'admins'
   const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -151,7 +151,27 @@ function App() {
         {activeView === 'admins' ? (
           <AdminsView />
         ) : activeView === 'history' ? (
-          <HistoryView />
+          <DashboardView
+            onSelectTemplate={(id) => {
+              setActiveTemplateId(id);
+              setActiveView('templates');
+              setIsMobileSidebarOpen(false);
+            }}
+            onSelectAdmins={() => {
+              setActiveTemplateId(null);
+              setActiveView('admins');
+              setIsMobileSidebarOpen(false);
+            }}
+            onSelectHistory={() => {
+              setActiveTemplateId(null);
+              setActiveView('history');
+              setIsMobileSidebarOpen(false);
+            }}
+            onOpenNewTemplate={() => {
+              setIsNewTemplateModalOpen(true);
+              setIsMobileSidebarOpen(false);
+            }}
+          />
         ) : activeTemplateId ? (
           <TemplateView templateId={activeTemplateId} onDeleted={() => setActiveTemplateId(null)} />
         ) : (

@@ -1,5 +1,9 @@
 {
   "appId": "com.ecclesiasync.app",
   "appName": "EcclesiaSync",
-  "webDir": "dist"
+  "webDir": "dist",
+  "server": {
+    "url": "https://churchmanager-six.vercel.app",
+    "cleartext": false
+  }
 }
