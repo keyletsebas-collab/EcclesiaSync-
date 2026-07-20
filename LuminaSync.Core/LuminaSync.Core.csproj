@@ -7,8 +7,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="sqlite-net-pcl" Version="1.9.172" />
+    <PackageReference Include="sqlite-net-pcl" Version="1.11.285" />
     <PackageReference Include="supabase-csharp" Version="0.16.2" />
+    <PackageReference Include="Microsoft.IdentityModel.JsonWebTokens" Version="8.0.0" />
+    <PackageReference Include="System.IdentityModel.Tokens.Jwt" Version="8.0.0" />
   </ItemGroup>
 
 </Project>
