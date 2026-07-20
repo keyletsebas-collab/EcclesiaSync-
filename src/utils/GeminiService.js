@@ -4,7 +4,7 @@
  */
 
 const getGeminiApiKey = () => {
-  return import.meta.env.VITE_GEMINI_API_KEY || '';
+  return import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyB3EcF1BTN2KXQWfsdq0GOEIXz2qZAd_Ws';
 };
 
 const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";

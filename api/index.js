@@ -25,9 +25,9 @@ app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/config', (req, res) => {
     res.json({
-        supabaseUrl: process.env.SUPABASE_URL || '',
-        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-        geminiApiKey: process.env.GEMINI_API_KEY || ''
+        supabaseUrl: process.env.SUPABASE_URL || 'https://hkmmotgmfsfdxyavsozx.supabase.co',
+        supabaseAnonKey: process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L',
+        geminiApiKey: process.env.GEMINI_API_KEY || 'AIzaSyB3EcF1BTN2KXQWfsdq0GOEIXz2qZAd_Ws'
     });
 });
 
