@@ -1,0 +1,6 @@
+<Solution>
+  <Project Path="LuminaSync.Core/LuminaSync.Core.csproj" />
+  <Project Path="LuminaSync.Installer/LuminaSync.Installer.csproj" />
+  <Project Path="LuminaSync.Linux/LuminaSync.Linux.csproj" />
+  <Project Path="LuminaSync.Maui/LuminaSync.Maui.csproj" />
+</Solution>
