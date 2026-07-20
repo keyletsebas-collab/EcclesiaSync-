@@ -26,7 +26,9 @@ namespace LuminaSync.Maui
             if (!_isInitialized)
             {
                 _isInitialized = true;
-                await InitializeAppAsync();
+                
+                // Start initialization in the background without blocking the UI thread
+                _ = InitializeAppAsync();
 
                 try
                 {

@@ -70,6 +70,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
     const [newPoemContent, setNewPoemContent] = useState('');
     const [isEditingTemplate, setIsEditingTemplate] = useState(false);
     const [editTemplateName, setEditTemplateName] = useState('');
+    const [editTemplatePassword, setEditTemplatePassword] = useState('');
     const [activeTab, setActiveTab] = useState('members'); // 'members' or 'services'
     const [copiedId, setCopiedId] = useState(null);
 
@@ -140,7 +141,11 @@ const TemplateView = ({ templateId, onDeleted }) => {
     const handleUpdateTemplateName = async (e) => {
         e.preventDefault();
         if (editTemplateName.trim()) {
-            await updateTemplate(templateId, { name: editTemplateName });
+            let updatedCustomFields = (template.customFields || []).filter(f => !f.startsWith('__password:'));
+            if (editTemplatePassword.trim()) {
+                updatedCustomFields.push(`__password:${editTemplatePassword.trim()}`);
+            }
+            await updateTemplate(templateId, { name: editTemplateName, customFields: updatedCustomFields });
             setIsEditingTemplate(false);
         }
     };
@@ -172,22 +177,44 @@ const TemplateView = ({ templateId, onDeleted }) => {
             }}>
                 <div>
                     {isEditingTemplate ? (
-                        <form onSubmit={handleUpdateTemplateName} style={{ display: 'flex', gap: '0.5rem' }}>
-                            <input
-                                className="glass-input"
-                                value={editTemplateName}
-                                onChange={(e) => setEditTemplateName(e.target.value)}
-                                autoFocus
-                            />
-                            <button type="submit" className="btn btn-primary"><Save size={16} /></button>
-                            <button type="button" onClick={() => setIsEditingTemplate(false)} className="btn">Cancel</button>
+                        <form onSubmit={handleUpdateTemplateName} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: '300px' }}>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Nombre de Plantilla</label>
+                                <input
+                                    className="glass-input"
+                                    value={editTemplateName}
+                                    onChange={(e) => setEditTemplateName(e.target.value)}
+                                    autoFocus
+                                    style={{ width: '100%' }}
+                                />
+                            </div>
+                            <div>
+                                <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.25rem' }}>Contraseña de Acceso (Opcional)</label>
+                                <input
+                                    type="text"
+                                    className="glass-input"
+                                    value={editTemplatePassword}
+                                    onChange={(e) => setEditTemplatePassword(e.target.value)}
+                                    placeholder="Sin contraseña"
+                                    style={{ width: '100%' }}
+                                />
+                            </div>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <button type="submit" className="btn btn-primary" style={{ padding: '0.4rem 0.8rem' }}><Save size={16} /> Guardar</button>
+                                <button type="button" onClick={() => setIsEditingTemplate(false)} className="btn" style={{ padding: '0.4rem 0.8rem' }}>Cancelar</button>
+                            </div>
                         </form>
                     ) : (
                         <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
                             <h1 style={{ margin: 0, fontSize: '2rem' }}>{template.name}</h1>
                             {canEdit && (
                                 <button
-                                    onClick={() => { setEditTemplateName(template.name); setIsEditingTemplate(true); }}
+                                    onClick={() => {
+                                        setEditTemplateName(template.name);
+                                        const pwdField = template.customFields?.find(f => f.startsWith('__password:'));
+                                        setEditTemplatePassword(pwdField ? pwdField.replace('__password:', '') : '');
+                                        setIsEditingTemplate(true);
+                                    }}
                                     style={{ background: 'none', border: 'none', color: 'var(--text-muted)', cursor: 'pointer' }}
                                 >
                                     <Edit2 size={16} />

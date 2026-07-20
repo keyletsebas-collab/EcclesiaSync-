@@ -13,8 +13,8 @@ import HistoryView from './components/HistoryView';
 import DashboardView from './components/DashboardView';
 
 function App() {
-  const { isAuthenticated } = useAuth();
-  const { addTemplate } = useStorage();
+  const { isAuthenticated, currentUser } = useAuth();
+  const { addTemplate, templates, members, addMember } = useStorage();
   const { t } = useLanguage();
   const [activeTemplateId, setActiveTemplateId] = useState(null);
   const [activeView, setActiveView] = useState('history'); // 'history', 'templates' or 'admins'
@@ -26,8 +26,14 @@ function App() {
   const [newTemplateName, setNewTemplateName] = useState('');
   const [newTemplateFields, setNewTemplateFields] = useState(['']);
   const [newTemplateType, setNewTemplateType] = useState('diaconos');
+  const [newTemplatePassword, setNewTemplatePassword] = useState('');
 
-
+  // Password Prompt States
+  const [pendingTemplateId, setPendingTemplateId] = useState(null);
+  const [templatePasswordPrompt, setTemplatePasswordPrompt] = useState('');
+  const [enteredTemplatePassword, setEnteredTemplatePassword] = useState('');
+  const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
+  const [passwordError, setPasswordError] = useState('');
 
   // Show Portada if not authenticated and showLanding is true
   if (!isAuthenticated && showLanding) {
@@ -53,12 +59,16 @@ function App() {
     } else {
       fields = newTemplateFields.filter(f => f.trim() !== '');
     }
+    if (newTemplatePassword.trim()) {
+      fields.push(`__password:${newTemplatePassword.trim()}`);
+    }
     try {
       await addTemplate(newTemplateName, fields);
       // Reset and close
       setNewTemplateName('');
       setNewTemplateFields(['']);
       setNewTemplateType('diaconos');
+      setNewTemplatePassword('');
       setIsNewTemplateModalOpen(false);
     } catch (err) {
       alert(`No se pudo crear la plantilla: ${err.message}`);
@@ -73,6 +83,98 @@ function App() {
     const newFields = [...newTemplateFields];
     newFields[index] = value;
     setNewTemplateFields(newFields);
+  };
+
+  const handleSelectTemplate = async (templateId) => {
+    const template = templates.find(t => t.id === templateId);
+    if (!template) return;
+
+    const isMaster = currentUser?.isMaster || false;
+    const activeMembership = currentUser?.memberships?.find(m => m.id === template.accountId);
+    const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+
+    const templateMembers = members.filter(m => m.templateId === templateId);
+    const isMember = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
+
+    if (isMaster || isMember) {
+      setActiveTemplateId(templateId);
+      setActiveView('templates');
+      setIsMobileSidebarOpen(false);
+      return;
+    }
+
+    const pwdField = template.customFields?.find(f => f.startsWith('__password:'));
+    if (!pwdField) {
+      // Auto join template if no password is set
+      try {
+        const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
+        const nextNumber = maxNumber + 1;
+        await addMember(templateId, {
+          name: currentUserFullName,
+          number: nextNumber,
+          phone: activeMembership?.phone || '',
+          identifications: {
+            familyRole: '',
+            familyName: '',
+            hasKey: false,
+            needsPrayer: false
+          }
+        });
+      } catch (err) {
+        console.error('Failed to auto join template:', err);
+      }
+      setActiveTemplateId(templateId);
+      setActiveView('templates');
+      setIsMobileSidebarOpen(false);
+      return;
+    }
+
+    const correctPassword = pwdField.replace('__password:', '');
+    setPendingTemplateId(templateId);
+    setTemplatePasswordPrompt(correctPassword);
+    setEnteredTemplatePassword('');
+    setPasswordError('');
+    setIsPasswordModalOpen(true);
+  };
+
+  const handlePasswordSubmit = async (e) => {
+    e.preventDefault();
+    if (enteredTemplatePassword.trim() === templatePasswordPrompt) {
+      const template = templates.find(t => t.id === pendingTemplateId);
+      const activeMembership = currentUser?.memberships?.find(m => m.id === template?.accountId);
+      const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+      const activePhone = activeMembership?.phone || '';
+      const templateMembers = members.filter(m => m.templateId === pendingTemplateId);
+
+      try {
+        const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
+        const nextNumber = maxNumber + 1;
+        await addMember(pendingTemplateId, {
+          name: currentUserFullName,
+          number: nextNumber,
+          phone: activePhone,
+          identifications: {
+            familyRole: '',
+            familyName: '',
+            hasKey: false,
+            needsPrayer: false
+          }
+        });
+      } catch (err) {
+        console.error('Error joining template:', err);
+      }
+
+      setActiveTemplateId(pendingTemplateId);
+      setActiveView('templates');
+      setIsMobileSidebarOpen(false);
+      setIsPasswordModalOpen(false);
+      setEnteredTemplatePassword('');
+      setPasswordError('');
+      setPendingTemplateId(null);
+      setTemplatePasswordPrompt('');
+    } else {
+      setPasswordError('Contraseña incorrecta. Por favor, inténtalo de nuevo.');
+    }
   };
 
 
@@ -123,11 +225,7 @@ function App() {
 
       <Sidebar
         activeTemplate={activeTemplateId}
-        onSelectTemplate={(id) => {
-          setActiveTemplateId(id);
-          setActiveView('templates');
-          setIsMobileSidebarOpen(false);
-        }}
+        onSelectTemplate={handleSelectTemplate}
         onOpenNewTemplate={() => {
           setIsNewTemplateModalOpen(true);
           setIsMobileSidebarOpen(false);
@@ -152,11 +250,7 @@ function App() {
           <AdminsView />
         ) : activeView === 'history' ? (
           <DashboardView
-            onSelectTemplate={(id) => {
-              setActiveTemplateId(id);
-              setActiveView('templates');
-              setIsMobileSidebarOpen(false);
-            }}
+            onSelectTemplate={handleSelectTemplate}
             onSelectAdmins={() => {
               setActiveTemplateId(null);
               setActiveView('admins');
@@ -176,11 +270,7 @@ function App() {
           <TemplateView templateId={activeTemplateId} onDeleted={() => setActiveTemplateId(null)} />
         ) : (
           <DashboardView
-            onSelectTemplate={(id) => {
-              setActiveTemplateId(id);
-              setActiveView('templates');
-              setIsMobileSidebarOpen(false);
-            }}
+            onSelectTemplate={handleSelectTemplate}
             onSelectAdmins={() => {
               setActiveTemplateId(null);
               setActiveView('admins');
@@ -277,6 +367,21 @@ function App() {
             </div>
           )}
 
+          {/* Password Protection Field */}
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem' }}>Contraseña de Acceso (Opcional)</label>
+            <input
+              type="password"
+              className="glass-input"
+              value={newTemplatePassword}
+              onChange={(e) => setNewTemplatePassword(e.target.value)}
+              placeholder="Ej. miClave123"
+            />
+            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginTop: '0.25rem', display: 'block' }}>
+              Si se establece, los usuarios que no pertenezcan a la plantilla deberán ingresarla para poder acceder.
+            </span>
+          </div>
+
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem', marginTop: '2rem' }}>
             <button
               type="button"
@@ -288,6 +393,61 @@ function App() {
             </button>
             <button type="submit" className="btn btn-primary">
               {t('createTemplate')}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Password Prompt Modal for Restricted Template Access */}
+      <Modal
+        isOpen={isPasswordModalOpen}
+        onClose={() => {
+          setIsPasswordModalOpen(false);
+          setEnteredTemplatePassword('');
+          setPasswordError('');
+          setPendingTemplateId(null);
+          setTemplatePasswordPrompt('');
+        }}
+        title="Acceso Restringido"
+      >
+        <form onSubmit={handlePasswordSubmit}>
+          <div style={{ marginBottom: '1.5rem' }}>
+            <p style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.5' }}>
+              No eres miembro de esta plantilla. Para poder unirte y acceder a sus datos, por favor ingresa la contraseña correspondiente:
+            </p>
+            <input
+              type="password"
+              className="glass-input"
+              value={enteredTemplatePassword}
+              onChange={(e) => setEnteredTemplatePassword(e.target.value)}
+              placeholder="Contraseña de la plantilla"
+              autoFocus
+              style={{ width: '100%' }}
+            />
+            {passwordError && (
+              <span style={{ fontSize: '0.8rem', color: 'var(--text-danger)', marginTop: '0.5rem', display: 'block', fontWeight: 500 }}>
+                ⚠️ {passwordError}
+              </span>
+            )}
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
+            <button
+              type="button"
+              className="btn"
+              style={{ background: 'transparent', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+              onClick={() => {
+                setIsPasswordModalOpen(false);
+                setEnteredTemplatePassword('');
+                setPasswordError('');
+                setPendingTemplateId(null);
+                setTemplatePasswordPrompt('');
+              }}
+            >
+              Cancelar
+            </button>
+            <button type="submit" className="btn btn-primary">
+              Entrar y Unirse
             </button>
           </div>
         </form>

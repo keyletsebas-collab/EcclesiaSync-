@@ -21,6 +21,7 @@ if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
 const PORT = process.env.PORT || 3001;
 
 // ─── Health Check ─────────────────────────────────────────────────────────────
+app.get('/favicon.ico', (req, res) => res.status(204).end());
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/config', (req, res) => {
     res.json({

@@ -17,15 +17,8 @@ if (typeof globalThis.WebSocket === 'undefined') {
     }
 }
 
-const supabaseUrl = (process.env.SUPABASE_URL || '').trim();
-const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || '').trim();
-
-if (!supabaseUrl) {
-    console.error('❌ Missing SUPABASE_URL in .env file');
-}
-if (!supabaseKey) {
-    console.error('❌ Missing SUPABASE_SERVICE_ROLE_KEY in .env file');
-}
+const supabaseUrl = (process.env.SUPABASE_URL || 'https://hkmmotgmfsfdxyavsozx.supabase.co').trim();
+const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || 'sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L').trim();
 
 const supabase = createClient(supabaseUrl, supabaseKey, {
     auth: {

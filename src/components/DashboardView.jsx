@@ -15,10 +15,22 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
 
     // Stats
     const totalTemplates = templates.length;
-    const totalMembers = members.length;
+
+    // Filter unique members by name to avoid duplicates across templates on the global dashboard
+    const uniqueMembers = [];
+    const seenNames = new Set();
+    members.forEach(m => {
+        const nameKey = m.name?.toLowerCase().trim() || '';
+        if (nameKey && !seenNames.has(nameKey)) {
+            seenNames.add(nameKey);
+            uniqueMembers.push(m);
+        }
+    });
+
+    const totalMembers = uniqueMembers.length;
     const totalServices = services.length;
-    const activePrayerRequests = members.filter(m => m.identifications?.needsPrayer);
-    const membersWithKeys = members.filter(m => m.identifications?.hasKey);
+    const activePrayerRequests = uniqueMembers.filter(m => m.identifications?.needsPrayer);
+    const membersWithKeys = uniqueMembers.filter(m => m.identifications?.hasKey);
 
     // Get 5 upcoming services
     const todayStr = new Date().toISOString().split('T')[0];
