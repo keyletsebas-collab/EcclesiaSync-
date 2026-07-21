@@ -5,6 +5,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Trash2, UserPlus, Flame, Upload, FileImage, Film, Eye } from 'lucide-react';
 import AssignServiceModal from './AssignServiceModal';
 
+import notificationService from '../utils/NotificationService';
+
 const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => {
     const { services, addService, deleteService, updateService, updateTemplate } = useStorage();
     const { currentUser, canEdit } = useAuth();
@@ -18,8 +20,33 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
 
     const templateServices = services.filter(s => s.templateId === templateId);
 
-    const handleAssign = (memberId, memberName, serviceDate, serviceType, assignedMembers, program) => {
-        addService(templateId, memberId, memberName, serviceDate, serviceType, program, assignedMembers);
+    const handleAssign = async (memberId, memberName, serviceDate, serviceType, assignedMembers, program) => {
+        await addService(templateId, memberId, memberName, serviceDate, serviceType, program, assignedMembers);
+
+        const lowerType = (serviceType || '').toLowerCase();
+        const lowerProgram = (program || '').toLowerCase();
+        const isCampaign = lowerType.includes('campaña') || lowerType.includes('campana') || lowerProgram.includes('campaña') || lowerProgram.includes('campana');
+        const isOuting = lowerType.includes('salida') || lowerProgram.includes('salida');
+        const isRehearsal = lowerType.includes('ensayo') || lowerProgram.includes('ensayo');
+
+        const isUserAssigned = assignedMembers?.some(m => m.name?.toLowerCase() === currentUser?.username?.toLowerCase()) || memberName?.toLowerCase() === currentUser?.username?.toLowerCase();
+
+        if (isOuting || isRehearsal) {
+            await notificationService.notifyRehearsalOrOutingCreated(
+                `${isOuting ? 'Salida' : 'Ensayo'} - ${template?.name || ''}`,
+                `Fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`,
+                isOuting
+            );
+        } else {
+            await notificationService.notifyCampaignOrAssignment({
+                serviceDate,
+                assignedMembers: assignedMembers || [],
+                serviceType,
+                program,
+                isUserAssigned,
+                isCampaign
+            });
+        }
     };
 
     const getMembersDisplay = (service) => {

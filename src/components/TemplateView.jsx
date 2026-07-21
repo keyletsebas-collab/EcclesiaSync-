@@ -8,6 +8,8 @@ import { Trash2, Edit2, UserPlus, UserMinus, Download, Search, ShieldAlert, Crow
 import Modal from './Modal';
 import ServicesView from './ServicesView';
 
+import notificationService from '../utils/NotificationService';
+
 const TemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
     const { currentUser, canEdit, users } = useAuth();
@@ -1384,6 +1386,11 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                         const validSchedules = editRehearsalSchedules.filter(s => s.days.trim() || s.time.trim());
                                         if (validSchedules.length > 0) {
                                             updatedCustomFields.push(`__rehearsalSchedules:${JSON.stringify(validSchedules)}`);
+                                            const schedDesc = validSchedules.map(s => `${s.days} a las ${s.time} (${s.modality})`).join(', ');
+                                            notificationService.notifyRehearsalOrOutingCreated(
+                                                `Horario de Ensayos Actualizado (${template?.name || ''})`,
+                                                `Días de ensayo: ${schedDesc}`
+                                            );
                                         }
                                     }
                                     try {

@@ -12,8 +12,10 @@ import AdminsView from './components/AdminsView';
 import HistoryView from './components/HistoryView';
 import DashboardView from './components/DashboardView';
 
+import notificationService from './utils/NotificationService';
+
 function App() {
-  const { isAuthenticated, currentUser } = useAuth();
+  const { isAuthenticated, currentUser, users } = useAuth();
   const { addTemplate, templates, members, addMember } = useStorage();
   const { t } = useLanguage();
   const [activeTemplateId, setActiveTemplateId] = useState(null);
@@ -21,6 +23,13 @@ function App() {
   const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  // Schedule birthday notifications when authenticated
+  useEffect(() => {
+    if (isAuthenticated && ((users && users.length > 0) || (members && members.length > 0))) {
+      notificationService.scheduleBirthdayNotifications(users || [], members || []);
+    }
+  }, [isAuthenticated, users, members]);
 
   // New Template Form State
   const [newTemplateName, setNewTemplateName] = useState('');

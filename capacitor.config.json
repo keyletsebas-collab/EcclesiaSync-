@@ -1,5 +1,11 @@
 {
   "appId": "com.ecclesiasync.app",
-  "appName": "EcclesiaSync",
-  "webDir": "dist"
+  "appName": "VerbumSync",
+  "webDir": "dist",
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_launcher",
+      "iconColor": "#6366F1"
+    }
+  }
 }
