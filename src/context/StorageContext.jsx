@@ -65,6 +65,18 @@ const mapProgramToObj = (row) => {
 
 export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const { currentUser, activeAccountId } = useAuth();
+
+    // Helper para generar UUID válidos en cualquier entorno (incluso sin HTTPS)
+    const generateUUID = () => {
+        if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+            try { return crypto.randomUUID(); } catch(e) {}
+        }
+        return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+            const r = Math.random() * 16 | 0, v = c === 'x' ? r : (r & 0x3 | 0x8);
+            return v.toString(16);
+        });
+    };
+
     const accountId = activeAccountId || propAccountId;
     const [templates, setTemplates] = useState([]);
     const [members, setMembers] = useState([]);
@@ -95,7 +107,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             if (sRes.error) console.error('Services fetch error:', sRes.error);
             if (pRes.error) console.error('Programs fetch error:', pRes.error);
 
-            const tData = (tRes.data || []).map(mapTemplateToObj);
+            const tData = (tRes.data || []).filter(t => t.name !== '__church_metadata__').map(mapTemplateToObj);
             const mData = (mRes.data || []).map(mapMemberToObj);
             const sData = (sRes.data || []).map(mapServiceToObj);
             const pData = (pRes.data || []).map(mapProgramToObj);
@@ -195,7 +207,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         setIsCreatingTemplate(true);
 
         try {
-            const newId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+            const newId = generateUUID();
             const newTemplateRow = {
                 id: newId,
                 account_id: accountId,
@@ -257,7 +269,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     // ── Member Actions ────────────────────────────────────────────────────────
 
     const addMember = async (templateId, memberData) => {
-        const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        const tempId = generateUUID();
         const newMemberRow = {
             id: tempId,
             template_id: templateId,
@@ -328,7 +340,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     // ── Service Actions ───────────────────────────────────────────────────────
 
     const addService = async (templateId, memberId, memberName, serviceDate, serviceType = '', program = '', assignedMembers = []) => {
-        const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        const tempId = generateUUID();
         const newServiceRow = {
             id: tempId,
             template_id: templateId,
@@ -349,6 +361,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             if (error) throw error;
         } catch (err) {
             console.error('Failed to add service:', err);
+            alert(`Error al guardar salida: ${err.message}. (Verifica tu esquema de base de datos)`);
             fetchData();
         }
     };
@@ -396,7 +409,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     // ── Program Actions ───────────────────────────────────────────────────────
 
     const addProgram = async (templateId, programData) => {
-        const tempId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+        const tempId = generateUUID();
         const newProgramRow = {
             id: tempId,
             template_id: templateId,

@@ -12,6 +12,7 @@ const Auth = () => {
     const [fullName, setFullName] = useState('');
     const [phone, setPhone] = useState('');
     const [accountId, setAccountId] = useState(''); // NEW: for joining existing account
+    const [churchName, setChurchName] = useState('');
     const [error, setError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
     const [loading, setLoading] = useState(false);
@@ -40,13 +41,18 @@ const Auth = () => {
         try {
             const result = isLogin
                 ? await login(username, password)
-                : await signup(username, password, username.toLowerCase().trim() === 'keylet', accountId, fullName, phone);
+                : await signup(username, password, username.toLowerCase().trim() === 'keylet', accountId, fullName, phone, churchName);
 
             if (!result.success) {
-                const msg = result.error === 'Account is blocked'
-                    ? '🔒 Tu cuenta ha sido bloqueada. Contacta al administrador.'
-                    : result.error;
-                setError(msg);
+                if (result.isDuplicate) {
+                    setIsLogin(true);
+                    setError(result.error);
+                } else {
+                    const msg = result.error === 'Account is blocked'
+                        ? '🔒 Tu cuenta ha sido bloqueada. Contacta al administrador.'
+                        : result.error;
+                    setError(msg);
+                }
             } else if (!isLogin && result.accountId) {
                 setSuccessMessage(`¡Cuenta creada con éxito! ID de tu Iglesia: ${result.accountId}`);
             }
@@ -62,6 +68,7 @@ const Auth = () => {
         setError('');
         setSuccessMessage('');
         setAccountId('');
+        setChurchName('');
         setFullName('');
         setPhone('');
     };
@@ -161,21 +168,46 @@ const Auth = () => {
                     </div>
 
                     {!isLogin && (
-                        <div className="input-group" style={{ marginBottom: '1.5rem' }}>
-                            <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
-                                {t('accountId')} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t('optional')})</span>
-                            </label>
-                            <input
-                                className="glass-input"
-                                value={accountId}
-                                onChange={(e) => setAccountId(e.target.value)}
-                                placeholder="E.g. 044EDFD5"
-                                style={{ textTransform: 'uppercase' }}
-                            />
-                            <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                                Para unirte a una cuenta existente, introduce su ID.
-                            </p>
-                        </div>
+                        <>
+                            <div className="input-group" style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                                    {t('accountId')} <span style={{ color: 'var(--text-muted)', fontSize: '0.7rem' }}>({t('optional')})</span>
+                                </label>
+                                <input
+                                    className="glass-input"
+                                    value={accountId}
+                                    onChange={(e) => {
+                                        setAccountId(e.target.value);
+                                        if (e.target.value.trim() !== '') {
+                                            setChurchName('');
+                                        }
+                                    }}
+                                    placeholder="E.g. 044EDFD5"
+                                    style={{ textTransform: 'uppercase' }}
+                                />
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                                    Para unirte a una cuenta existente, introduce su ID. Déjalo en blanco para crear una nueva iglesia.
+                                </p>
+                            </div>
+
+                            {!accountId.trim() && (
+                                <div className="input-group animate-fade-in" style={{ marginBottom: '1.5rem' }}>
+                                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                                        Nombre de la Nueva Iglesia *
+                                    </label>
+                                    <input
+                                        className="glass-input"
+                                        value={churchName}
+                                        onChange={(e) => setChurchName(e.target.value)}
+                                        placeholder="Ej: Primera Iglesia Bautista"
+                                        required={!accountId.trim()}
+                                    />
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
+                                        Escribe el nombre de la iglesia que deseas registrar.
+                                    </p>
+                                </div>
+                            )}
+                        </>
                     )}
 
 

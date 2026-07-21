@@ -13,11 +13,70 @@ const TemplateView = ({ templateId, onDeleted }) => {
     const { currentUser, canEdit, users } = useAuth();
     const { t } = useLanguage();
 
+    const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+    const [searchTerm, setSearchTerm] = useState('');
+
+    // Poetry states
+    const [expandedPoemId, setExpandedPoemId] = useState(null);
+    const [poemFilter, setPoemFilter] = useState('all');
+    const [isDigitalizing, setIsDigitalizing] = useState(false);
+    const [aiResult, setAiResult] = useState('');
+    const [aiTitle, setAiTitle] = useState('');
+    const [showAiPanel, setShowAiPanel] = useState(false);
+    const [editingPoemId, setEditingPoemId] = useState(null);
+    const [editPoemData, setEditPoemData] = useState({ title: '', content: '' });
+
+    // Forms
+    const [newPoemTitle, setNewPoemTitle] = useState('');
+    const [newPoemAuthor, setNewPoemAuthor] = useState('');
+    const [newPoemContent, setNewPoemContent] = useState('');
+    const [isEditingTemplate, setIsEditingTemplate] = useState(false);
+    const [editTemplateName, setEditTemplateName] = useState('');
+    const [editTemplatePassword, setEditTemplatePassword] = useState('');
+    const [editRehearsalSchedules, setEditRehearsalSchedules] = useState([]);
+    const [activeTab, setActiveTab] = useState('members'); // 'members' or 'services'
+    const [copiedId, setCopiedId] = useState(null);
+
+    // Family System State
+    const [activeFamilyKey, setActiveFamilyKey] = useState(null);
+    const [linkMemberId, setLinkMemberId] = useState('');
+    const [linkRole, setLinkRole] = useState('Hijo/a');
+    const [newFamilyName, setNewFamilyName] = useState('');
+    const [newFamilyRole, setNewFamilyRole] = useState('Jefe de familia');
+    const [newFamilyMemberId, setNewFamilyMemberId] = useState('');
+
+    // Member Form State
+    const [newMember, setNewMember] = useState({
+        name: '',
+        number: '',
+        phone: '',
+        isLeader: false,
+        identifications: {}
+    });
+
     const template = templates.find(t => t.id === templateId);
     const templateMembers = members.filter(m => m.templateId === templateId);
 
     const activeMembership = currentUser?.memberships?.find(m => m.id === template?.accountId);
     const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+
+    React.useEffect(() => {
+        if (template) {
+            setEditTemplateName(template.name || '');
+            const pwdField = template.customFields?.find(f => f.startsWith('__password:'));
+            setEditTemplatePassword(pwdField ? pwdField.replace('__password:', '') : '');
+            const schedulesField = template.customFields?.find(f => f.startsWith('__rehearsalSchedules:'));
+            if (schedulesField) {
+                try {
+                    setEditRehearsalSchedules(JSON.parse(schedulesField.replace('__rehearsalSchedules:', '')));
+                } catch (e) {
+                    setEditRehearsalSchedules([]);
+                }
+            } else {
+                setEditRehearsalSchedules([]);
+            }
+        }
+    }, [templateId, templates]);
 
     const isPoetry = template?.customFields?.includes('__poetry__');
     const isSonido = template?.customFields?.includes('__sonido__');
@@ -51,37 +110,6 @@ const TemplateView = ({ templateId, onDeleted }) => {
         );
     }
 
-    const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
-    const [searchTerm, setSearchTerm] = useState('');
-
-    // Poetry states
-    const [expandedPoemId, setExpandedPoemId] = useState(null);
-    const [poemFilter, setPoemFilter] = useState('all');
-    const [isDigitalizing, setIsDigitalizing] = useState(false);
-    const [aiResult, setAiResult] = useState('');
-    const [aiTitle, setAiTitle] = useState('');
-    const [showAiPanel, setShowAiPanel] = useState(false);
-    const [editingPoemId, setEditingPoemId] = useState(null);
-    const [editPoemData, setEditPoemData] = useState({ title: '', content: '' });
-
-    // Forms
-    const [newPoemTitle, setNewPoemTitle] = useState('');
-    const [newPoemAuthor, setNewPoemAuthor] = useState('');
-    const [newPoemContent, setNewPoemContent] = useState('');
-    const [isEditingTemplate, setIsEditingTemplate] = useState(false);
-    const [editTemplateName, setEditTemplateName] = useState('');
-    const [editTemplatePassword, setEditTemplatePassword] = useState('');
-    const [activeTab, setActiveTab] = useState('members'); // 'members' or 'services'
-    const [copiedId, setCopiedId] = useState(null);
-
-    // Family System State
-    const [activeFamilyKey, setActiveFamilyKey] = useState(null);
-    const [linkMemberId, setLinkMemberId] = useState('');
-    const [linkRole, setLinkRole] = useState('Hijo/a');
-    const [newFamilyName, setNewFamilyName] = useState('');
-    const [newFamilyRole, setNewFamilyRole] = useState('Jefe de familia');
-    const [newFamilyMemberId, setNewFamilyMemberId] = useState('');
-
     const handleSetFamily = async (memberId, familyName, familyRole) => {
         const member = members.find(m => m.id === memberId);
         if (member) {
@@ -113,17 +141,6 @@ const TemplateView = ({ templateId, onDeleted }) => {
     };
 
     const membersWithoutFamily = templateMembers.filter(m => !m.identifications?.familyName?.trim());
-
-    // Member Form State
-    const [newMember, setNewMember] = useState({
-        name: '',
-        number: '',
-        phone: '',
-        isLeader: false,
-        identifications: {}
-    });
-
-    if (!template) return null;
 
     const handleAddMember = async (e) => {
         e.preventDefault();
@@ -169,6 +186,8 @@ const TemplateView = ({ templateId, onDeleted }) => {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem',
                 marginBottom: '2rem',
                 background: 'rgba(15, 23, 42, 0.3)',
                 padding: '1.5rem',
@@ -227,7 +246,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                     </p>
                 </div>
 
-                <div style={{ display: 'flex', gap: '1rem' }}>
+                <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <button
                         className="btn"
                         style={{ background: 'rgba(99, 102, 241, 0.1)', color: 'var(--primary)', border: '1px solid var(--primary-glow)' }}
@@ -274,7 +293,12 @@ const TemplateView = ({ templateId, onDeleted }) => {
                 gap: '0.5rem',
                 marginBottom: '2rem',
                 borderBottom: '1px solid var(--border)',
-                paddingBottom: '0.5rem'
+                paddingBottom: '0.5rem',
+                overflowX: 'auto',
+                whiteSpace: 'nowrap',
+                WebkitOverflowScrolling: 'touch',
+                scrollbarWidth: 'none',
+                msOverflowStyle: 'none'
             }}>
                 <button
                     onClick={() => setActiveTab('members')}
@@ -286,7 +310,9 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         borderRadius: 'var(--radius)',
                         cursor: 'pointer',
                         fontWeight: 600,
-                        transition: 'all 0.2s'
+                        transition: 'all 0.2s',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
                     }}
                 >
                     {isPoetry ? '📖 Biblioteca de Poemas' : t('members')}
@@ -305,7 +331,9 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             transition: 'all 0.2s',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem'
+                            gap: '0.5rem',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
                         }}
                     >
                         👨‍👩‍👧‍👦 Familias
@@ -324,7 +352,9 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         transition: 'all 0.2s',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem'
+                        gap: '0.5rem',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
                     }}
                 >
                     <Calendar size={16} />
@@ -344,30 +374,36 @@ const TemplateView = ({ templateId, onDeleted }) => {
                             transition: 'all 0.2s',
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem'
+                            gap: '0.5rem',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
                         }}
                     >
                         👥 Usuarios
                     </button>
                 )}
-                <button
-                    onClick={() => setActiveTab('finances')}
-                    style={{
-                        background: activeTab === 'finances' ? 'var(--primary-glow)' : 'transparent',
-                        border: 'none',
-                        color: activeTab === 'finances' ? '#fff' : 'var(--text-muted)',
-                        padding: '0.75rem 1.5rem',
-                        borderRadius: 'var(--radius)',
-                        cursor: 'pointer',
-                        fontWeight: 600,
-                        transition: 'all 0.2s',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.5rem'
-                    }}
-                >
-                    💵 Finanzas
-                </button>
+                {(!(!isPoetry && !isSonido)) && (
+                    <button
+                        onClick={() => setActiveTab('finances')}
+                        style={{
+                            background: activeTab === 'finances' ? 'var(--primary-glow)' : 'transparent',
+                            border: 'none',
+                            color: activeTab === 'finances' ? '#fff' : 'var(--text-muted)',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: 'var(--radius)',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        💵 Finanzas
+                    </button>
+                )}
                 <button
                     onClick={() => setActiveTab('programs')}
                     style={{
@@ -381,11 +417,35 @@ const TemplateView = ({ templateId, onDeleted }) => {
                         transition: 'all 0.2s',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem'
+                        gap: '0.5rem',
+                        flexShrink: 0,
+                        whiteSpace: 'nowrap'
                     }}
                 >
                     📖 Programas
                 </button>
+                {(currentUser?.isMaster || activeMembership?.role === 'master') && (
+                    <button
+                        onClick={() => setActiveTab('settings')}
+                        style={{
+                            background: activeTab === 'settings' ? 'var(--primary-glow)' : 'transparent',
+                            border: 'none',
+                            color: activeTab === 'settings' ? '#fff' : 'var(--text-muted)',
+                            padding: '0.75rem 1.5rem',
+                            borderRadius: 'var(--radius)',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            transition: 'all 0.2s',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            flexShrink: 0,
+                            whiteSpace: 'nowrap'
+                        }}
+                    >
+                        🔧 Configuraciones
+                    </button>
+                )}
             </div>
 
             {activeTab === 'members' ? (
@@ -452,7 +512,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                 <input
                                     className="glass-input"
                                     placeholder="Buscar por título, autor o contenido..."
-                                    style={{ paddingLeft: '2.5rem' }}
+                                    style={{ paddingLeft: '2.5rem', width: '100%' }}
                                     value={searchTerm}
                                     onChange={(e) => setSearchTerm(e.target.value)}
                                 />
@@ -516,7 +576,7 @@ const TemplateView = ({ templateId, onDeleted }) => {
                                             {/* Header summary */}
                                             <div
                                                 onClick={() => !isEditing && setExpandedPoemId(isExpanded ? null : poem.id)}
-                                                style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+                                                style={{ padding: '1rem 1.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem', cursor: 'pointer' }}
                                             >
                                                 <div style={{ flex: 1, minWidth: 0 }}>
                                                     {isEditing ? (
@@ -1174,8 +1234,196 @@ const TemplateView = ({ templateId, onDeleted }) => {
                 <ProgramsView templateId={templateId} accountId={template.accountId} isTemplateEditor={currentUser?.isMaster || activeMembership?.role === 'master' || activeMembership?.role === 'editor'} />
             ) : activeTab === 'finances' ? (
                 <FinancesView templateId={templateId} accountId={template.accountId} isTemplateAdmin={currentUser?.isMaster || activeMembership?.role === 'master'} />
+            ) : activeTab === 'settings' ? (
+                <div className="glass-panel animate-fade-in" style={{ padding: '2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem', maxWidth: '500px', margin: '0 auto' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        🔧 Configuraciones de la Plantilla
+                    </h3>
+                    
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                Nombre de la Plantilla
+                            </label>
+                            <input
+                                className="glass-input"
+                                value={editTemplateName}
+                                onChange={(e) => setEditTemplateName(e.target.value)}
+                                disabled={!canEdit}
+                                placeholder="Nombre de la plantilla"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
+
+                        <div>
+                            <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                Contraseña de Acceso
+                            </label>
+                            <input
+                                type="text"
+                                className="glass-input"
+                                value={editTemplatePassword}
+                                onChange={(e) => setEditTemplatePassword(e.target.value)}
+                                disabled={!canEdit}
+                                placeholder="Sin contraseña (pública)"
+                                style={{ width: '100%' }}
+                            />
+                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.35rem' }}>
+                                {canEdit 
+                                  ? 'Define una contraseña para restringir el acceso a esta plantilla a usuarios no registrados.'
+                                  : 'Contraseña requerida para ingresar a esta plantilla (solo lectura para ti).'
+                                }
+                            </span>
+                        </div>
+
+                        {isPoetry && (
+                            <div style={{ display: 'flex', gap: '1rem', flexDirection: 'column' }}>
+                                <h4 style={{ margin: 0, fontSize: '0.95rem', color: 'var(--text-main)', borderBottom: '1px solid var(--border)', paddingBottom: '0.5rem', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                    <span>Horarios de Ensayo</span>
+                                    {canEdit && (
+                                        <button 
+                                            type="button" 
+                                            className="btn" 
+                                            style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', display: 'flex', gap: '0.25rem', alignItems: 'center' }}
+                                            onClick={() => setEditRehearsalSchedules([...editRehearsalSchedules, { days: '', time: '', modality: 'Presencial' }])}
+                                        >
+                                            <UserPlus size={12} /> Añadir Horario
+                                        </button>
+                                    )}
+                                </h4>
+                                
+                                {editRehearsalSchedules.length === 0 ? (
+                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', textAlign: 'center', padding: '1rem', background: 'rgba(255,255,255,0.02)', borderRadius: '8px' }}>
+                                        No hay horarios configurados.
+                                    </div>
+                                ) : (
+                                    editRehearsalSchedules.map((schedule, index) => (
+                                        <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: '0.75rem', alignItems: 'end', background: 'rgba(255,255,255,0.03)', padding: '0.75rem', borderRadius: '8px' }}>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Días</label>
+                                                <input
+                                                    className="glass-input"
+                                                    value={schedule.days}
+                                                    onChange={(e) => {
+                                                        const newSchedules = [...editRehearsalSchedules];
+                                                        newSchedules[index].days = e.target.value;
+                                                        setEditRehearsalSchedules(newSchedules);
+                                                    }}
+                                                    disabled={!canEdit}
+                                                    placeholder="Ej: Lunes"
+                                                    style={{ width: '100%', fontSize: '0.8rem' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label style={{ display: 'block', fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Hora</label>
+                                                <input
+                                                    type="time"
+                                                    className="glass-input"
+                                                    value={schedule.time}
+                                                    onChange={(e) => {
+                                                        const newSchedules = [...editRehearsalSchedules];
+                                                        newSchedules[index].time = e.target.value;
+                                                        setEditRehearsalSchedules(newSchedules);
+                                                    }}
+                                                    disabled={!canEdit}
+                                                    style={{ width: '100%', fontSize: '0.8rem' }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <button
+                                                    type="button"
+                                                    disabled={!canEdit}
+                                                    onClick={() => {
+                                                        const newSchedules = [...editRehearsalSchedules];
+                                                        newSchedules[index].modality = schedule.modality === 'Presencial' ? 'Virtual' : 'Presencial';
+                                                        setEditRehearsalSchedules(newSchedules);
+                                                    }}
+                                                    style={{
+                                                        padding: '0.4rem 0.6rem',
+                                                        borderRadius: '6px',
+                                                        fontSize: '0.75rem',
+                                                        fontWeight: 600,
+                                                        border: '1px solid ' + (schedule.modality === 'Virtual' ? '#3b82f6' : '#10b981'),
+                                                        background: schedule.modality === 'Virtual' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                                        color: schedule.modality === 'Virtual' ? '#60a5fa' : '#34d399',
+                                                        cursor: canEdit ? 'pointer' : 'default',
+                                                        minWidth: '80px'
+                                                    }}
+                                                >
+                                                    {schedule.modality || 'Presencial'}
+                                                </button>
+                                            </div>
+                                            {canEdit && (
+                                                <button
+                                                    type="button"
+                                                    className="btn btn-danger"
+                                                    style={{ padding: '0.4rem' }}
+                                                    onClick={() => {
+                                                        const newSchedules = editRehearsalSchedules.filter((_, i) => i !== index);
+                                                        setEditRehearsalSchedules(newSchedules);
+                                                    }}
+                                                >
+                                                    <Trash2 size={14} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+                        )}
+
+                        {canEdit && (
+                            <button
+                                onClick={async () => {
+                                    if (!editTemplateName.trim()) return;
+                                    let updatedCustomFields = (template.customFields || []).filter(f => !f.startsWith('__password:') && !f.startsWith('__rehearsalDays:') && !f.startsWith('__rehearsalTime:') && !f.startsWith('__rehearsalSchedules:'));
+                                    if (editTemplatePassword.trim()) {
+                                        updatedCustomFields.push(`__password:${editTemplatePassword.trim()}`);
+                                    }
+                                    if (isPoetry && editRehearsalSchedules.length > 0) {
+                                        const validSchedules = editRehearsalSchedules.filter(s => s.days.trim() || s.time.trim());
+                                        if (validSchedules.length > 0) {
+                                            updatedCustomFields.push(`__rehearsalSchedules:${JSON.stringify(validSchedules)}`);
+                                        }
+                                    }
+                                    try {
+                                        await updateTemplate(templateId, { name: editTemplateName, customFields: updatedCustomFields });
+                                        alert('Configuración guardada correctamente.');
+                                    } catch (err) {
+                                        alert(`Error al guardar cambios: ${err.message}`);
+                                    }
+                                }}
+                                className="btn btn-primary"
+                                style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%' }}
+                            >
+                                <Save size={16} /> Guardar Cambios
+                            </button>
+                        )}
+                        
+                        {canEdit && (
+                            <div style={{ marginTop: '1.5rem', borderTop: '1px solid rgba(239, 68, 68, 0.2)', paddingTop: '1.5rem' }}>
+                                <h4 style={{ margin: '0 0 0.5rem 0', fontSize: '0.95rem', color: '#f87171' }}>Zona de Peligro</h4>
+                                <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginBottom: '1rem' }}>
+                                    Al eliminar esta plantilla, se borrarán todos sus miembros, servicios, poemas e historial de forma permanente.
+                                </p>
+                                <button
+                                    className="btn btn-danger"
+                                    onClick={async () => {
+                                        if (window.confirm(t('deleteTemplateConfirm'))) {
+                                            await deleteTemplate(template.id);
+                                            if (onDeleted) onDeleted();
+                                        }
+                                    }}
+                                    style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem', width: '100%' }}
+                                >
+                                    <Trash2 size={16} /> Eliminar Plantilla
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                </div>
             ) : (
-                <ServicesView templateId={templateId} members={templateMembers} isPoetry={isPoetry} isSonido={isSonido} />
+                <ServicesView template={template} templateId={templateId} members={templateMembers} isPoetry={isPoetry} isSonido={isSonido} />
             )}
                     </>
                 ) : (

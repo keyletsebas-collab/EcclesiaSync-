@@ -4,10 +4,10 @@
  */
 
 const getGeminiApiKey = () => {
-  return import.meta.env.VITE_GEMINI_API_KEY || 'AIzaSyB3EcF1BTN2KXQWfsdq0GOEIXz2qZAd_Ws';
+  return import.meta.env.VITE_GEMINI_API_KEY || '';
 };
 
-const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-latest:generateContent";
+const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent";
 
 const SUPPORTED_MIME_TYPES = [
   "image/jpeg",

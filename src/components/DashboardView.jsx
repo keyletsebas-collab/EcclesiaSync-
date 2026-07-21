@@ -1,15 +1,44 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
+import { supabase } from '../lib/supabase';
 import { Sparkles, Scroll, Users, Calendar, Heart, Plus, Shield, ChevronRight } from 'lucide-react';
 import { getRandomVerse } from '../utils/bibleVerses';
 
 const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOpenNewTemplate }) => {
     const { templates, members, services, updateMember } = useStorage();
-    const { currentUser, canEdit } = useAuth();
+    const { currentUser, activeAccountId, canEdit } = useAuth();
     const { t } = useLanguage();
     const [verse] = useState(() => getRandomVerse());
+    const [churchName, setChurchName] = useState('');
+
+    useEffect(() => {
+        const fetchChurchName = async () => {
+            if (!activeAccountId) return;
+            try {
+                const { data } = await supabase
+                    .from('templates')
+                    .select('custom_fields')
+                    .eq('account_id', activeAccountId)
+                    .eq('name', '__church_metadata__')
+                    .maybeSingle();
+
+                if (data) {
+                    const nameField = data.custom_fields?.find(f => f.startsWith('__church_name:'));
+                    if (nameField) {
+                        setChurchName(nameField.replace('__church_name:', ''));
+                    }
+                } else {
+                    setChurchName('');
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        fetchChurchName();
+    }, [activeAccountId]);
 
     const isKeylet = currentUser?.username?.toLowerCase() === 'keylet';
 
@@ -75,6 +104,11 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
                     <h1 style={{ fontSize: '2.25rem', fontWeight: 800, margin: 0, letterSpacing: '-0.5px' }}>
                         ¡Bienvenido, {currentUser?.username || 'Administrador'}!
                     </h1>
+                    {churchName && (
+                        <h4 style={{ fontSize: '1.1rem', fontWeight: 600, color: 'var(--primary)', margin: '0.25rem 0 0 0', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                            ⛪ {churchName}
+                        </h4>
+                    )}
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.95rem', lineHeight: '1.6', marginTop: '0.75rem' }}>
                         Gestiona los miembros, planifica actividades, digitaliza poemarios y coordina la oración y control de llaves en tiempo real.
                     </p>

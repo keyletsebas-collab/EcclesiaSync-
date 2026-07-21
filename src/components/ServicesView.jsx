@@ -5,8 +5,8 @@ import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Trash2, UserPlus, Flame, Upload, FileImage, Film, Eye } from 'lucide-react';
 import AssignServiceModal from './AssignServiceModal';
 
-const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
-    const { services, addService, deleteService, updateService } = useStorage();
+const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => {
+    const { services, addService, deleteService, updateService, updateTemplate } = useStorage();
     const { currentUser, canEdit } = useAuth();
     const hasEditPermission = canEdit || isSonido;
     const { t } = useLanguage();
@@ -169,6 +169,28 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
         });
     });
 
+    // Extract rehearsal info for poetry
+    const schedulesField = template?.customFields?.find(f => f.startsWith('__rehearsalSchedules:'));
+    let rehearsalSchedules = [];
+    if (schedulesField) {
+        try {
+            rehearsalSchedules = JSON.parse(schedulesField.replace('__rehearsalSchedules:', ''));
+        } catch (e) {
+            rehearsalSchedules = [];
+        }
+    } else {
+        // Fallback for the old single field format (just in case they saved it a minute ago)
+        const daysField = template?.customFields?.find(f => f.startsWith('__rehearsalDays:'));
+        const timeField = template?.customFields?.find(f => f.startsWith('__rehearsalTime:'));
+        if (daysField || timeField) {
+            rehearsalSchedules = [{
+                days: daysField ? daysField.replace('__rehearsalDays:', '') : '',
+                time: timeField ? timeField.replace('__rehearsalTime:', '') : '',
+                modality: 'Presencial'
+            }];
+        }
+    }
+
     return (
         <div className="animate-fade-in" style={{ padding: '0 0.5rem' }}>
             {/* Header */}
@@ -176,6 +198,8 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                 display: 'flex',
                 justifyContent: 'space-between',
                 alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '1rem',
                 marginBottom: '2rem',
                 background: 'var(--bg-glass)',
                 padding: '1.5rem',
@@ -212,6 +236,89 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                     </button>
                 )}
             </header>
+
+            {/* Rehearsal Schedule Banner for Poetry */}
+            {isPoetry && rehearsalSchedules.length > 0 && (
+                <div style={{
+                    marginBottom: '2rem',
+                    background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
+                    border: '1px solid rgba(99, 102, 241, 0.3)',
+                    borderRadius: '12px',
+                    padding: '1.25rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '1rem'
+                }}>
+                    <div style={{
+                        background: 'rgba(99, 102, 241, 0.2)',
+                        padding: '0.75rem',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center'
+                    }}>
+                        <Calendar size={24} color="var(--primary)" />
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <h3 style={{ margin: 0, fontSize: '1.1rem', color: 'var(--text-main)', display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                            Horarios Habituales de Ensayo
+                        </h3>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {rehearsalSchedules.map((schedule, idx) => (
+                                <div key={idx} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', color: 'var(--text-muted)', fontSize: '0.95rem', background: 'rgba(255,255,255,0.03)', padding: '0.4rem 0.75rem', borderRadius: '8px', flexWrap: 'wrap' }}>
+                                    {schedule.days && <span>Días: <strong>{schedule.days}</strong></span>}
+                                    {schedule.days && schedule.time && <span style={{ opacity: 0.5 }}>|</span>}
+                                    {schedule.time && <span>Hora: <strong>{schedule.time}</strong></span>}
+                                    {(schedule.days || schedule.time) && <span style={{ opacity: 0.5 }}>|</span>}
+                                    <span style={{ 
+                                        fontSize: '0.75rem', 
+                                        fontWeight: 700, 
+                                        padding: '0.15rem 0.5rem', 
+                                        borderRadius: '4px',
+                                        background: schedule.modality === 'Virtual' ? 'rgba(59, 130, 246, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                        color: schedule.modality === 'Virtual' ? '#60a5fa' : '#34d399'
+                                    }}>
+                                        {schedule.modality || 'Presencial'}
+                                    </span>
+                                    {hasEditPermission && (
+                                        <button
+                                            className="btn-danger"
+                                            style={{
+                                                padding: '0.2rem',
+                                                borderRadius: '4px',
+                                                background: 'transparent',
+                                                border: 'none',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                marginLeft: 'auto'
+                                            }}
+                                            onClick={async () => {
+                                                if (window.confirm('¿Seguro que deseas eliminar este horario habitual?')) {
+                                                    const newSchedules = rehearsalSchedules.filter((_, i) => i !== idx);
+                                                    let updatedCustomFields = (template.customFields || []).filter(f => !f.startsWith('__rehearsalSchedules:'));
+                                                    if (newSchedules.length > 0) {
+                                                        updatedCustomFields.push(`__rehearsalSchedules:${JSON.stringify(newSchedules)}`);
+                                                    }
+                                                    try {
+                                                        await updateTemplate(templateId, { customFields: updatedCustomFields });
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                    }
+                                                }
+                                            }}
+                                            title="Eliminar Horario Habitual"
+                                        >
+                                            <Trash2 size={14} color="#f87171" />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
 
             {/* List of Month Groups */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2.5rem', marginBottom: '3rem' }}>
@@ -519,7 +626,10 @@ const ServicesView = ({ templateId, members, isPoetry, isSonido }) => {
                 isOpen={isAssignModalOpen}
                 onClose={() => setIsAssignModalOpen(false)}
                 templateId={templateId}
-                members={members}
+                members={isPoetry ? members.filter(m => m.identifications?.isParticipant) : members}
+                poems={isPoetry ? members.filter(m => !m.identifications?.isParticipant) : []}
+                isPoetry={isPoetry}
+                isSonido={isSonido}
                 onAssign={handleAssign}
             />
 

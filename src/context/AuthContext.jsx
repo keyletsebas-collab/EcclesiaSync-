@@ -178,7 +178,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '') => {
+    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '', churchName = '') => {
         try {
             const username = email?.toLowerCase().trim();
 
@@ -189,9 +189,24 @@ export const AuthProvider = ({ children }) => {
                 .eq('username', username)
                 .maybeSingle();
 
-            if (checkErr) throw checkErr;
-            if (existingUser) {
-                return { success: false, error: 'Username already exists' };
+            if (checkErr && checkErr.code !== 'PGRST116') throw checkErr;
+            if (existingUser || (checkErr && checkErr.code === 'PGRST116')) {
+                return { success: false, error: 'Este correo ya tiene una cuenta. Por favor, inicia sesión.', isDuplicate: true };
+            }
+
+            // Also check if the email is inside any user's memberships (e.g. they registered a username but put this email in their profile)
+            const { data: allUsers, error: allUsersErr } = await supabase
+                .from('users')
+                .select('memberships');
+
+            if (!allUsersErr && allUsers) {
+                const emailInUse = allUsers.some(u => {
+                    const mems = typeof u.memberships === 'string' ? JSON.parse(u.memberships) : (u.memberships || []);
+                    return mems.some(m => m.email?.toLowerCase().trim() === username);
+                });
+                if (emailInUse) {
+                    return { success: false, error: 'Este correo ya tiene una cuenta. Por favor, inicia sesión.', isDuplicate: true };
+                }
             }
 
             const finalAccountId = accountId 
@@ -223,6 +238,20 @@ export const AuthProvider = ({ children }) => {
 
             const { error: insErr } = await supabase.from('users').insert([newUserRow]);
             if (insErr) throw insErr;
+
+            // If they created a new church, insert church metadata template
+            if (!accountId && churchName.trim()) {
+                const metadataTemplateId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+                const metadataRow = {
+                    id: metadataTemplateId,
+                    account_id: finalAccountId,
+                    name: '__church_metadata__',
+                    custom_fields: [`__church_name:${churchName.trim()}`, `__creator_uid:${uid}`, `__creator_username:${username}`],
+                    created_at: new Date().toISOString()
+                };
+                const { error: metaErr } = await supabase.from('templates').insert([metadataRow]);
+                if (metaErr) console.error('Failed to create church metadata:', metaErr);
+            }
 
             const mappedUser = mapUserToObj(newUserRow);
             setCurrentUser(mappedUser);
@@ -281,6 +310,7 @@ export const AuthProvider = ({ children }) => {
             const dbUpdates = {};
             if (updates.isMaster !== undefined) dbUpdates.is_master = !!updates.isMaster;
             if (updates.isBlocked !== undefined) dbUpdates.is_blocked = !!updates.isBlocked;
+            if (updates.memberships !== undefined) dbUpdates.memberships = updates.memberships;
 
             const { error } = await supabase
                 .from('users')
@@ -291,6 +321,7 @@ export const AuthProvider = ({ children }) => {
             await fetchUsers();
         } catch (err) {
             console.error('Failed to update user role:', err);
+            alert(`Error al actualizar rol del usuario: ${err.message || err}`);
         }
     };
 
@@ -305,20 +336,72 @@ export const AuthProvider = ({ children }) => {
             await fetchUsers();
         } catch (err) {
             console.error('Failed to toggle block:', err);
+            alert(`Error al cambiar estado de bloqueo: ${err.message || err}`);
         }
     };
 
     const deleteUser = async (uid) => {
         try {
+            // Get user info first to find associated members
+            const { data: userToDelete, error: fetchErr } = await supabase
+                .from('users')
+                .select('*')
+                .eq('uid', uid)
+                .maybeSingle();
+
+            if (fetchErr) throw fetchErr;
+
+            // Delete the user
             const { error } = await supabase
                 .from('users')
                 .delete()
                 .eq('uid', uid);
 
             if (error) throw error;
+
+            // Cascade delete the associated members in templates
+            if (userToDelete) {
+                const mappedUser = mapUserToObj(userToDelete);
+
+                // Delete members from the members table
+                const { data: allMembers, error: memFetchErr } = await supabase
+                    .from('members')
+                    .select('id, name, phone');
+
+                if (!memFetchErr && allMembers) {
+                    const idsToDelete = allMembers
+                        .filter(m => {
+                            const nameLower = m.name?.toLowerCase().trim();
+                            const phoneTrim = m.phone?.trim() || '';
+
+                            // Match membership name AND phone
+                            const matchesMembership = (mappedUser.memberships || []).some(mem => {
+                                const memName = mem.fullName?.toLowerCase().trim();
+                                const memPhone = mem.phone?.trim() || '';
+                                return nameLower === memName && phoneTrim === memPhone;
+                            });
+
+                            // Match username directly (e.g. if they didn't have memberships but signed up with this username)
+                            const matchesUsername = nameLower === mappedUser.username.toLowerCase().trim();
+
+                            return matchesMembership || matchesUsername;
+                        })
+                        .map(m => m.id);
+
+                    if (idsToDelete.length > 0) {
+                        const { error: memDelErr } = await supabase
+                            .from('members')
+                            .delete()
+                            .in('id', idsToDelete);
+                        if (memDelErr) console.error('Failed to delete associated members:', memDelErr);
+                    }
+                }
+            }
+
             await fetchUsers();
         } catch (err) {
             console.error('Failed to delete user:', err);
+            alert(`Error al eliminar usuario del sistema: ${err.message || err}`);
         }
     };
 
@@ -361,6 +444,75 @@ export const AuthProvider = ({ children }) => {
             return { success: true };
         } catch (err) {
             console.error('Join account error:', err);
+            return { success: false, error: err.message || 'Connection error' };
+        }
+    };
+
+    const leaveAccount = async (accountId) => {
+        if (!currentUser) return { success: false, error: 'Not logged in' };
+        try {
+            const cleanAccountId = accountId.trim().toUpperCase();
+            const memberships = (currentUser.memberships || []).filter(m => m.id !== cleanAccountId);
+
+            const { error: updErr } = await supabase
+                .from('users')
+                .update({ memberships })
+                .eq('uid', currentUser.uid);
+
+            if (updErr) throw updErr;
+
+            // Cascade delete this user from the members table of that account
+            const namesToDelete = new Set();
+            const phonesToDelete = new Set();
+
+            if (currentUser.username) {
+                namesToDelete.add(currentUser.username.toLowerCase().trim());
+            }
+
+            const targetMembership = (currentUser.memberships || []).find(m => m.id === cleanAccountId);
+            if (targetMembership) {
+                if (targetMembership.fullName) namesToDelete.add(targetMembership.fullName.toLowerCase().trim());
+                if (targetMembership.phone) phonesToDelete.add(targetMembership.phone.trim());
+            }
+
+            const { data: allMembers, error: memFetchErr } = await supabase
+                .from('members')
+                .select('id, name, phone')
+                .eq('account_id', cleanAccountId);
+
+            if (!memFetchErr && allMembers) {
+                const idsToDelete = allMembers
+                    .filter(m => {
+                        const nameLower = m.name?.toLowerCase().trim();
+                        const phoneTrim = m.phone?.trim() || '';
+                        const matchesName = namesToDelete.has(nameLower);
+                        const matchesPhone = phoneTrim && phonesToDelete.has(phoneTrim);
+                        return matchesName || matchesPhone;
+                    })
+                    .map(m => m.id);
+
+                if (idsToDelete.length > 0) {
+                    await supabase
+                        .from('members')
+                        .delete()
+                        .in('id', idsToDelete);
+                }
+            }
+
+            // Update local state
+            const updatedUser = { ...currentUser, memberships };
+            setCurrentUser(updatedUser);
+
+            // Switch active account if we left the current active one
+            if (activeAccountId === cleanAccountId) {
+                const nextActiveId = memberships[0]?.id || null;
+                setActiveAccountId(nextActiveId);
+            }
+
+            await fetchUsers();
+            return { success: true };
+        } catch (err) {
+            console.error('Leave account error:', err);
             return { success: false, error: err.message || 'Connection error' };
         }
     };
@@ -424,6 +576,53 @@ export const AuthProvider = ({ children }) => {
         return membership?.role === 'master' || membership?.role === 'editor';
     };
 
+    const createChurch = async (churchName) => {
+        if (!currentUser) return { success: false, error: 'Not logged in' };
+        try {
+            const finalAccountId = crypto.randomUUID ? crypto.randomUUID().substring(0, 8).toUpperCase() : Math.random().toString(36).substring(2, 10).toUpperCase();
+
+            // Insert metadata template row
+            const metadataTemplateId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+            const metadataRow = {
+                id: metadataTemplateId,
+                account_id: finalAccountId,
+                name: '__church_metadata__',
+                custom_fields: [`__church_name:${churchName.trim()}`, `__creator_uid:${currentUser.uid}`, `__creator_username:${currentUser.username}`],
+                created_at: new Date().toISOString()
+            };
+            const { error: metaErr } = await supabase.from('templates').insert([metadataRow]);
+            if (metaErr) throw metaErr;
+
+            // Update user's memberships
+            const memberships = [...(currentUser.memberships || [])];
+            memberships.push({
+                id: finalAccountId,
+                role: 'master',
+                expiresAt: null,
+                fullName: currentUser.username,
+                phone: '',
+                email: currentUser.username
+            });
+
+            const { error: updErr } = await supabase
+                .from('users')
+                .update({ memberships })
+                .eq('uid', currentUser.uid);
+
+            if (updErr) throw updErr;
+
+            const updatedUser = { ...currentUser, memberships };
+            setCurrentUser(updatedUser);
+            setActiveAccountId(finalAccountId);
+
+            await fetchUsers();
+            return { success: true };
+        } catch (err) {
+            console.error('Create church error:', err);
+            return { success: false, error: err.message || 'Connection error' };
+        }
+    };
+
     const updateProfile = async (birthday, address) => {
         if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
@@ -455,6 +654,8 @@ export const AuthProvider = ({ children }) => {
         login,
         logout,
         joinAccount,
+        leaveAccount,
+        createChurch,
         updateMembershipRole,
         updateUserRole,
         toggleBlockUser,

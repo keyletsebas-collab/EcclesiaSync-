@@ -139,7 +139,7 @@ function App() {
 
   const handlePasswordSubmit = async (e) => {
     e.preventDefault();
-    if (enteredTemplatePassword.trim() === templatePasswordPrompt) {
+    if (enteredTemplatePassword.trim() === templatePasswordPrompt.trim()) {
       const template = templates.find(t => t.id === pendingTemplateId);
       const activeMembership = currentUser?.memberships?.find(m => m.id === template?.accountId);
       const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
@@ -191,7 +191,10 @@ function App() {
         <button onClick={() => setIsMobileSidebarOpen(true)} className="mobile-menu-btn">
           <Menu size={24} />
         </button>
-        <span className="mobile-logo">VerbumSync</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+          <img src="/logo.png" alt="Logo" style={{ width: '24px', height: '24px', borderRadius: '6px', objectFit: 'cover' }} />
+          <span className="mobile-logo">VerbumSync</span>
+        </div>
         <div style={{ width: 24 }}></div> {/* spacer */}
       </header>
 
@@ -203,25 +206,6 @@ function App() {
         />
       )}
 
-      {/* Version Indicator */}
-      <div style={{
-        position: 'fixed',
-        top: '20px',
-        right: '24px',
-        zIndex: 9999,
-        background: 'rgba(2, 6, 23, 0.4)',
-        backdropFilter: 'blur(12px)',
-        padding: '6px 12px',
-        borderRadius: '100px',
-        fontSize: '11px',
-        fontWeight: 600,
-        color: 'var(--primary)',
-        border: '1px solid var(--border)',
-        letterSpacing: '0.05em',
-        pointerEvents: 'none'
-      }}>
-        VerbumSync CORE v3.0
-      </div>
 
       <Sidebar
         activeTemplate={activeTemplateId}

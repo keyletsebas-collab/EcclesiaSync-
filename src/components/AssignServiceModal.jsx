@@ -4,13 +4,14 @@ import { useStorage } from '../context/StorageContext';
 import Modal from './Modal';
 import { Calendar, Users, Flame, Info } from 'lucide-react';
 
-const AssignServiceModal = ({ isOpen, onClose, templateId, members, onAssign }) => {
+const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], isPoetry, isSonido, onAssign }) => {
     const { t } = useLanguage();
     const { programs } = useStorage();
     const [selectedMemberIds, setSelectedMemberIds] = useState([]);
     const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
     const [serviceType, setServiceType] = useState('');
     const [selectedProgramId, setSelectedProgramId] = useState('');
+    const [selectedPoemId, setSelectedPoemId] = useState('');
     const [isCampaign, setIsCampaign] = useState(false);
 
     const templatePrograms = (programs || []).filter(p => p.templateId === templateId);
@@ -33,7 +34,14 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, onAssign }) 
             : serviceType.trim();
 
         const selectedProgram = templatePrograms.find(p => p.id === selectedProgramId);
-        const programText = selectedProgram ? `=== ${selectedProgram.title} ===\n${selectedProgram.content}` : '';
+        let programText = selectedProgram ? `=== ${selectedProgram.title} ===\n${selectedProgram.content}` : '';
+
+        if (isPoetry && selectedPoemId) {
+            const poem = poems.find(p => p.id === selectedPoemId);
+            if (poem) {
+                programText = `📖 Poesía: ${poem.name}\n-----------------------\n${poem.identifications?.content || ''}\n\n${programText}`;
+            }
+        }
 
         onAssign(primaryMember.id, primaryMember.name, serviceDate, finalServiceType, selectedMembers, programText);
 
@@ -42,6 +50,7 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, onAssign }) 
         setServiceDate(new Date().toISOString().split('T')[0]);
         setServiceType('');
         setSelectedProgramId('');
+        setSelectedPoemId('');
         setIsCampaign(false);
         onClose();
     };
@@ -128,19 +137,42 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, onAssign }) 
                     </select>
                 </div>
 
-                <div style={{ marginBottom: '1.25rem' }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
-                        <Info size={16} color="var(--primary)" />
-                        Lugar / Función / Detalles
-                    </label>
-                    <input
-                        className="glass-input"
-                        value={serviceType}
-                        onChange={(e) => setServiceType(e.target.value)}
-                        placeholder="Ej: Iglesia de Ozama, Ensayos generales, etc."
-                        style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
-                    />
-                </div>
+                {isPoetry && poems.length > 0 && (
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
+                            📝 Seleccionar Poesía a Recitar (Opcional)
+                        </label>
+                        <select
+                            className="glass-input"
+                            value={selectedPoemId}
+                            onChange={(e) => setSelectedPoemId(e.target.value)}
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
+                        >
+                            <option value="">-- Ninguna --</option>
+                            {poems.map(p => (
+                                <option key={p.id} value={p.id}>
+                                    {p.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                )}
+
+                {!isSonido && (
+                    <div style={{ marginBottom: '1.25rem' }}>
+                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
+                            <Info size={16} color="var(--primary)" />
+                            Lugar / Función / Detalles
+                        </label>
+                        <input
+                            className="glass-input"
+                            value={serviceType}
+                            onChange={(e) => setServiceType(e.target.value)}
+                            placeholder="Ej: Iglesia de Ozama, Ensayos generales, etc."
+                            style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
+                        />
+                    </div>
+                )}
 
                 <div style={{
                     marginBottom: '1.5rem',

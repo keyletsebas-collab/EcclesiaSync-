@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { Shield, Trash2, Users, Crown, Eye, EyeOff, Key, Clock, Calendar, Check, ShieldAlert } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const AdminsView = () => {
     const { currentUser, activeAccountId, users, fetchUsers, updateMembershipRole, updateUserRole, toggleBlockUser, deleteUser } = useAuth();
@@ -11,9 +12,85 @@ const AdminsView = () => {
     const [editStates, setEditStates] = useState({}); // uid -> { role, durationType, expiresAt }
     const [successMessage, setSuccessMessage] = useState('');
 
+    const isSuperAdmin = currentUser?.username?.toLowerCase().trim() === 'keylet';
+    const [selectedChurchCode, setSelectedChurchCode] = useState(activeAccountId);
+    const [churches, setChurches] = useState([]);
+    const [loadingChurches, setLoadingChurches] = useState(false);
+    const [editingChurchCode, setEditingChurchCode] = useState(null);
+    const [editChurchName, setEditChurchName] = useState('');
+
+    const fetchChurches = async () => {
+        setLoadingChurches(true);
+        try {
+            // Collect all unique account IDs from users memberships to discover legacy churches
+            const allAccountIds = new Set();
+            users.forEach(u => {
+                if (u.accountId) allAccountIds.add(u.accountId);
+                u.memberships?.forEach(m => {
+                    if (m.id) allAccountIds.add(m.id);
+                });
+            });
+
+            const { data, error } = await supabase
+                .from('templates')
+                .select('*')
+                .eq('name', '__church_metadata__');
+
+            if (!error && data) {
+                const metadataAccountIds = new Set(data.map(item => item.account_id));
+                const mapped = data.map(item => {
+                    const nameField = item.custom_fields?.find(f => f.startsWith('__church_name:'));
+                    const creatorUidField = item.custom_fields?.find(f => f.startsWith('__creator_uid:'));
+                    const creatorUserField = item.custom_fields?.find(f => f.startsWith('__creator_username:'));
+
+                    return {
+                        templateId: item.id,
+                        code: item.account_id,
+                        name: nameField ? nameField.replace('__church_name:', '') : 'Sin Nombre',
+                        creatorUid: creatorUidField ? creatorUidField.replace('__creator_uid:', '') : '',
+                        creatorUsername: creatorUserField ? creatorUserField.replace('__creator_username:', '') : 'Desconocido',
+                        createdAt: item.created_at
+                    };
+                });
+
+                // Synthesize placeholders for legacy churches
+                allAccountIds.forEach(code => {
+                    if (!metadataAccountIds.has(code)) {
+                        mapped.push({
+                            templateId: null,
+                            code: code,
+                            name: `Iglesia ${code} (Sin nombre asignado)`,
+                            creatorUid: 'legacy',
+                            creatorUsername: 'Legacy / Desconocido',
+                            createdAt: new Date().toISOString()
+                        });
+                    }
+                });
+
+                setChurches(mapped);
+            }
+        } catch (err) {
+            console.error(err);
+        } finally {
+            setLoadingChurches(false);
+        }
+    };
+
+    useEffect(() => {
+        if (isSuperAdmin) {
+            fetchChurches();
+        }
+    }, [isSuperAdmin]);
+
+    useEffect(() => {
+        setSelectedChurchCode(activeAccountId);
+    }, [activeAccountId]);
+
+    const targetAccountId = isSuperAdmin ? selectedChurchCode : activeAccountId;
+
     useEffect(() => {
         fetchUsers();
-    }, [activeAccountId]);
+    }, [targetAccountId]);
 
     const togglePasswordVisibility = (uid) => {
         setVisiblePasswords(prev => ({
@@ -25,7 +102,7 @@ const AdminsView = () => {
     const handleInitEditState = (user) => {
         if (editStates[user.uid]) return;
         
-        const membership = user.memberships?.find(m => m.id === activeAccountId);
+        const membership = user.memberships?.find(m => m.id === targetAccountId);
         const currentRole = membership ? membership.role : 'remove';
         const currentExpiresAt = membership?.expiresAt ? membership.expiresAt.substring(0, 10) : '';
         const currentDurationType = membership?.expiresAt ? 'limited' : 'indefinite';
@@ -65,10 +142,51 @@ const AdminsView = () => {
 
         try {
             if (role === 'remove') {
-                const updatedMemberships = (user.memberships || []).filter(m => m.id !== activeAccountId);
+                const updatedMemberships = (user.memberships || []).filter(m => m.id !== targetAccountId);
                 await updateUserRole(user.uid, { memberships: updatedMemberships });
+
+                // Also cascade delete from members table for this account
+                const namesToDelete = new Set();
+                const phonesToDelete = new Set();
+
+                if (user.username) {
+                    namesToDelete.add(user.username.toLowerCase().trim());
+                }
+
+                // Get the user's fullName and phone for the targetAccountId membership before removing it
+                const targetMembership = (user.memberships || []).find(m => m.id === targetAccountId);
+                if (targetMembership) {
+                    if (targetMembership.fullName) namesToDelete.add(targetMembership.fullName.toLowerCase().trim());
+                    if (targetMembership.phone) phonesToDelete.add(targetMembership.phone.trim());
+                }
+
+                // Delete members from the members table for targetAccountId
+                const { data: allMembers, error: memFetchErr } = await supabase
+                    .from('members')
+                    .select('id, name, phone')
+                    .eq('account_id', targetAccountId);
+
+                if (!memFetchErr && allMembers) {
+                    const idsToDelete = allMembers
+                        .filter(m => {
+                            const nameLower = m.name?.toLowerCase().trim();
+                            const phoneTrim = m.phone?.trim() || '';
+                            const matchesName = namesToDelete.has(nameLower);
+                            const matchesPhone = phoneTrim && phonesToDelete.has(phoneTrim);
+                            return matchesName || matchesPhone;
+                        })
+                        .map(m => m.id);
+
+                    if (idsToDelete.length > 0) {
+                        const { error: memDelErr } = await supabase
+                            .from('members')
+                            .delete()
+                            .in('id', idsToDelete);
+                        if (memDelErr) console.error('Failed to delete associated members:', memDelErr);
+                    }
+                }
             } else {
-                await updateMembershipRole(user.uid, activeAccountId, role, expiresAtIso);
+                await updateMembershipRole(user.uid, targetAccountId, role, expiresAtIso);
             }
             
             setSuccessMessage(`Rol de ${user.username} actualizado correctamente.`);
@@ -102,6 +220,10 @@ const AdminsView = () => {
         }
     };
 
+    const activeChurchUsers = users.filter(user => 
+        user.memberships?.some(m => m.id === targetAccountId)
+    );
+
     return (
         <div className="animate-fade-in" style={{ padding: '0.5rem' }}>
             {/* Header */}
@@ -121,7 +243,7 @@ const AdminsView = () => {
                         Gestión de Administradores e Invitados
                     </h1>
                     <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>
-                        Administra los roles, permisos temporales y cuentas de usuario para la iglesia activa: <strong style={{ color: 'var(--primary)' }}>{activeAccountId}</strong>
+                        Administra los roles, permisos temporales y cuentas de usuario para la iglesia activa: <strong style={{ color: 'var(--primary)' }}>{targetAccountId}</strong>
                     </p>
                 </div>
             </header>
@@ -145,6 +267,130 @@ const AdminsView = () => {
                 </div>
             )}
 
+            {isSuperAdmin && (
+                <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                    <h3 style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.5rem',
+                        marginBottom: '1.25rem',
+                        fontSize: '1.1rem',
+                        fontWeight: 600
+                    }}>
+                        ⛪ Gestión Global de Iglesias (Super Admin)
+                    </h3>
+                    
+                    {loadingChurches ? (
+                        <div style={{ color: 'var(--text-muted)' }}>Cargando iglesias...</div>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                            {churches.map(c => {
+                                const isEditing = editingChurchCode === c.code;
+                                const isSelected = selectedChurchCode === c.code;
+                                return (
+                                    <div key={c.code} style={{
+                                        padding: '1rem',
+                                        background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'rgba(15, 23, 42, 0.4)',
+                                        border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                        borderRadius: '12px',
+                                        display: 'flex',
+                                        flexDirection: 'column',
+                                        gap: '0.5rem'
+                                    }}>
+                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
+                                            {isEditing ? (
+                                                <form onSubmit={async (e) => {
+                                                    e.preventDefault();
+                                                    if (!editChurchName.trim()) return;
+                                                    
+                                                    try {
+                                                        const { data: metaTemplate } = await supabase
+                                                            .from('templates')
+                                                            .select('*')
+                                                            .eq('account_id', c.code)
+                                                            .eq('name', '__church_metadata__')
+                                                            .maybeSingle();
+
+                                                        if (metaTemplate) {
+                                                            const updatedFields = metaTemplate.custom_fields.map(f => {
+                                                                if (f.startsWith('__church_name:')) {
+                                                                    return `__church_name:${editChurchName.trim()}`;
+                                                                }
+                                                                return f;
+                                                            });
+                                                            await supabase
+                                                                .from('templates')
+                                                                .update({ custom_fields: updatedFields })
+                                                                .eq('id', metaTemplate.id);
+                                                        } else {
+                                                            const metadataTemplateId = crypto.randomUUID ? crypto.randomUUID() : Math.random().toString(36).substring(2);
+                                                            const metadataRow = {
+                                                                id: metadataTemplateId,
+                                                                account_id: c.code,
+                                                                name: '__church_metadata__',
+                                                                custom_fields: [`__church_name:${editChurchName.trim()}`, `__creator_uid:legacy`, `__creator_username:legacy`],
+                                                                created_at: new Date().toISOString()
+                                                            };
+                                                            await supabase.from('templates').insert([metadataRow]);
+                                                        }
+                                                        setEditingChurchCode(null);
+                                                        fetchChurches();
+                                                        setSuccessMessage('Nombre de iglesia actualizado.');
+                                                        setTimeout(() => setSuccessMessage(''), 3000);
+                                                    } catch (err) {
+                                                        console.error(err);
+                                                    }
+                                                }} style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+                                                    <input
+                                                        type="text"
+                                                        className="glass-input"
+                                                        value={editChurchName}
+                                                        onChange={(e) => setEditChurchName(e.target.value)}
+                                                        style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                                                    />
+                                                    <button type="submit" className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>Guardar</button>
+                                                    <button type="button" onClick={() => setEditingChurchCode(null)} className="btn" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}>Cancelar</button>
+                                                </form>
+                                            ) : (
+                                                <div>
+                                                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{c.name}</span>
+                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>({c.code})</span>
+                                                </div>
+                                            )}
+
+                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                                {!isEditing && (
+                                                    <button
+                                                        onClick={() => {
+                                                            setEditingChurchCode(c.code);
+                                                            setEditChurchName(c.name);
+                                                        }}
+                                                        className="btn"
+                                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
+                                                    >
+                                                        ✏️ Editar Nombre
+                                                    </button>
+                                                )}
+                                                <button
+                                                    onClick={() => setSelectedChurchCode(c.code)}
+                                                    className={`btn ${isSelected ? 'btn-primary' : ''}`}
+                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)' }}
+                                                >
+                                                    🔍 Ver Usuarios
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                            Creador: {c.creatorUsername} ({c.creatorUid}) | Registrada el: {new Date(c.createdAt).toLocaleDateString()}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                </div>
+            )}
+
             <div className="glass-panel" style={{ padding: '1.5rem' }}>
                 <h3 style={{
                     display: 'flex',
@@ -155,11 +401,11 @@ const AdminsView = () => {
                     fontWeight: 600
                 }}>
                     <Users size={20} color="var(--primary)" />
-                    Usuarios Registrados en el Sistema ({users.length})
+                    Usuarios Registrados en esta Iglesia ({activeChurchUsers.length})
                 </h3>
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {users.map(user => {
+                    {activeChurchUsers.map(user => {
                         handleInitEditState(user);
                         const editState = editStates[user.uid] || { role: 'remove', durationType: 'indefinite', expiresAt: '' };
                         const isThisUserCurrentUser = user.uid === currentUser?.uid;
@@ -177,7 +423,7 @@ const AdminsView = () => {
                                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
                                     
                                     {/* User General Info */}
-                                    <div style={{ flex: '1 1 300px' }}>
+                                    <div style={{ flex: '1 1 260px', minWidth: 0 }}>
                                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
                                             <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-main)' }}>{user.username}</span>
                                             {isThisUserCurrentUser && (
@@ -264,8 +510,8 @@ const AdminsView = () => {
                                                 <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                                                     {(user.memberships || []).map((m, idx) => (
                                                         <span key={idx} style={{
-                                                            background: m.id === activeAccountId ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                                            border: m.id === activeAccountId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)',
+                                                            background: m.id === targetAccountId ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.05)',
+                                                            border: m.id === targetAccountId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)',
                                                             padding: '0.15rem 0.4rem',
                                                             borderRadius: '4px',
                                                             fontSize: '0.65rem',
@@ -280,9 +526,10 @@ const AdminsView = () => {
                                         </div>
                                     </div>
 
-                                    {/* Role Configuration Form for activeAccountId */}
+                                    {/* Role Configuration Form for targetAccountId */}
                                     <div style={{
-                                        flex: '1 1 350px',
+                                        flex: '1 1 260px',
+                                        minWidth: 0,
                                         background: 'rgba(255, 255, 255, 0.02)',
                                         border: '1px solid var(--border)',
                                         borderRadius: '8px',
@@ -293,12 +540,12 @@ const AdminsView = () => {
                                     }}>
                                         <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
                                             <Shield size={14} color="var(--primary)" />
-                                            Ajustes de Rol para {activeAccountId}
+                                            Ajustes de Rol para {targetAccountId}
                                         </div>
 
-                                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                                             {/* Role Selector */}
-                                            <div>
+                                            <div style={{ flex: '1 1 140px' }}>
                                                 <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Rol</label>
                                                 <select
                                                     className="glass-input"
@@ -315,7 +562,7 @@ const AdminsView = () => {
 
                                             {/* Duration Type Selector */}
                                             {editState.role !== 'remove' && (
-                                                <div>
+                                                <div style={{ flex: '1 1 140px' }}>
                                                     <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Duración</label>
                                                     <select
                                                         className="glass-input"
@@ -364,7 +611,7 @@ const AdminsView = () => {
                                                 Guardar Configuración de Rol
                                             </button>
 
-                                            {user.memberships?.some(m => m.id === activeAccountId) ? (
+                                            {user.memberships?.some(m => m.id === targetAccountId) ? (
                                                 <button
                                                     className="btn btn-danger"
                                                     style={{
@@ -376,7 +623,7 @@ const AdminsView = () => {
                                                         color: '#fca5a5'
                                                     }}
                                                     onClick={async () => {
-                                                        const updatedMemberships = (user.memberships || []).filter(m => m.id !== activeAccountId);
+                                                        const updatedMemberships = (user.memberships || []).filter(m => m.id !== targetAccountId);
                                                         await updateUserRole(user.uid, { memberships: updatedMemberships });
                                                         setSuccessMessage(`Acceso revocado para ${user.username}.`);
                                                         setTimeout(() => setSuccessMessage(''), 3000);
@@ -399,7 +646,7 @@ const AdminsView = () => {
                                                         color: '#34d399'
                                                     }}
                                                     onClick={async () => {
-                                                        await updateMembershipRole(user.uid, activeAccountId, 'viewer', null);
+                                                        await updateMembershipRole(user.uid, targetAccountId, 'viewer', null);
                                                         setSuccessMessage(`Acceso concedido (Viewer) para ${user.username}.`);
                                                         setTimeout(() => setSuccessMessage(''), 3000);
                                                         await fetchUsers();
@@ -416,7 +663,7 @@ const AdminsView = () => {
                                 {/* Global Administration Buttons (Delete and Block) */}
                                 <div style={{
                                     display: 'flex',
-                                    justifyContent: 'flex-end',
+                                    flexWrap: 'wrap',
                                     gap: '0.5rem',
                                     borderTop: '1px solid var(--border)',
                                     paddingTop: '0.75rem',
@@ -429,7 +676,12 @@ const AdminsView = () => {
                                             fontSize: '0.75rem',
                                             background: user.isMaster ? 'rgba(239, 68, 68, 0.15)' : 'rgba(99, 102, 241, 0.15)',
                                             border: user.isMaster ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(99, 102, 241, 0.3)',
-                                            color: user.isMaster ? '#fca5a5' : '#a5b4fc'
+                                            color: user.isMaster ? '#fca5a5' : '#a5b4fc',
+                                            flex: '1 1 260px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.35rem'
                                         }}
                                         onClick={async () => {
                                             if (window.confirm(`¿Estás seguro de ${user.isMaster ? 'quitar' : 'conceder'} permisos de Master Global a ${user.username}?`)) {
@@ -452,7 +704,12 @@ const AdminsView = () => {
                                             fontSize: '0.75rem',
                                             background: user.isBlocked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
                                             border: user.isBlocked ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
-                                            color: user.isBlocked ? '#34d399' : '#fca5a5'
+                                            color: user.isBlocked ? '#34d399' : '#fca5a5',
+                                            flex: '1 1 260px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.35rem'
                                         }}
                                         onClick={() => handleToggleBlock(user.uid, user.isBlocked)}
                                         disabled={isThisUserCurrentUser}
@@ -465,7 +722,12 @@ const AdminsView = () => {
                                         className="btn-danger"
                                         style={{
                                             padding: '0.4rem 0.75rem',
-                                            fontSize: '0.75rem'
+                                            fontSize: '0.75rem',
+                                            flex: '1 1 260px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            justifyContent: 'center',
+                                            gap: '0.35rem'
                                         }}
                                         onClick={() => confirmDelete(user.uid, user.username)}
                                         disabled={isThisUserCurrentUser}

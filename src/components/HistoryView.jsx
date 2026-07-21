@@ -1,12 +1,43 @@
 import React, { useState, useEffect } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
+import { useAuth } from '../context/AuthContext';
+import { supabase } from '../lib/supabase';
 import { Scroll, Users, Calendar, Sparkles, BookOpen, HelpCircle } from 'lucide-react';
 
 const HistoryView = () => {
     const { templates, members, services, loading } = useStorage();
     const { t } = useLanguage();
+    const { activeAccountId } = useAuth();
     const [selectedTemplateId, setSelectedTemplateId] = useState('');
+    const [churchName, setChurchName] = useState('');
+
+    useEffect(() => {
+        const fetchChurchName = async () => {
+            if (!activeAccountId) return;
+            try {
+                const { data } = await supabase
+                    .from('templates')
+                    .select('custom_fields')
+                    .eq('account_id', activeAccountId)
+                    .eq('name', '__church_metadata__')
+                    .maybeSingle();
+
+                if (data) {
+                    const nameField = data.custom_fields?.find(f => f.startsWith('__church_name:'));
+                    if (nameField) {
+                        setChurchName(nameField.replace('__church_name:', ''));
+                    }
+                } else {
+                    setChurchName('');
+                }
+            } catch (err) {
+                console.error(err);
+            }
+        };
+
+        fetchChurchName();
+    }, [activeAccountId]);
 
     // Get selected template details
     const selectedTemplate = templates.find(t => t.id === selectedTemplateId);
@@ -32,7 +63,7 @@ const HistoryView = () => {
                         <Scroll size={28} color="var(--primary)" /> Historial e Información
                     </h2>
                     <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem', marginTop: '0.35rem' }}>
-                        Explora la configuración, miembros y registro de actividades de tus plantillas activas.
+                        Explora la configuración, miembros y registro de actividades de tus plantillas activas de la iglesia: <strong style={{ color: 'var(--primary)' }}>{churchName || activeAccountId}</strong>
                     </p>
                 </div>
             </div>
@@ -50,7 +81,7 @@ const HistoryView = () => {
                         style={{ width: '100%', padding: '0.75rem', fontSize: '0.95rem' }}
                     >
                         <option value="">-- Elige una plantilla --</option>
-                        {templates.map(t => (
+                        {templates.filter(t => t.name !== '__church_metadata__').map(t => (
                             <option key={t.id} value={t.id}>
                                 {t.name} ({t.customFields?.includes('__poetry__') ? 'Poesía' : 'Miembros/Diáconos'})
                             </option>

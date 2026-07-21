@@ -7,12 +7,13 @@ import {
     Globe, User, Shield, LogOut, Info, Download, Moon, Sun,
     Eye, EyeOff, Lock, Unlock, Trash2, Users, RefreshCw
 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 const Settings = ({ isOpen, onClose }) => {
     const { 
         currentUser, logout, users, fetchUsers, 
         toggleBlockUser, deleteUser, joinAccount, updateMembershipRole,
-        updateProfile
+        updateProfile, leaveAccount, createChurch
     } = useAuth();
     const { currentLanguage, setLanguage, t } = useLanguage();
     const { theme, setTheme } = useTheme();
@@ -21,6 +22,35 @@ const Settings = ({ isOpen, onClose }) => {
     const [joinError, setJoinError] = useState('');
     const [visiblePasswords, setVisiblePasswords] = useState({});
     const [loadingAction, setLoadingAction] = useState(null);
+    const [churchNames, setChurchNames] = useState({});
+
+    const fetchChurchNames = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('templates')
+                .select('account_id, custom_fields')
+                .eq('name', '__church_metadata__');
+
+            if (!error && data) {
+                const mapping = {};
+                data.forEach(item => {
+                    const nameField = item.custom_fields?.find(f => f.startsWith('__church_name:'));
+                    if (nameField) {
+                        mapping[item.account_id] = nameField.replace('__church_name:', '');
+                    }
+                });
+                setChurchNames(mapping);
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    };
+
+    useEffect(() => {
+        if (isOpen && currentUser) {
+            fetchChurchNames();
+        }
+    }, [isOpen, currentUser]);
 
     const [birthday, setBirthday] = useState(currentUser?.birthday || '');
     const [address, setAddress] = useState(currentUser?.address || '');
@@ -160,6 +190,44 @@ const Settings = ({ isOpen, onClose }) => {
                     </div>
                 </div>
 
+                {/* List of Churches / Memberships */}
+                <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.75rem', fontWeight: 600 }}>Mis Iglesias / Congregaciones</label>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                        {currentUser?.memberships?.map(m => (
+                            <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
+                                <div>
+                                    <span style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block' }}>
+                                        {churchNames[m.id] || 'Iglesia Sin Nombre'}
+                                    </span>
+                                    <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
+                                        Código: {m.id} | Rol: {m.role}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={async () => {
+                                        if (window.confirm(`¿Estás seguro de que quieres salirte de la iglesia "${churchNames[m.id] || m.id}"?`)) {
+                                            setLoadingAction(m.id + '_leave');
+                                            const res = await leaveAccount(m.id);
+                                            setLoadingAction(null);
+                                            if (res.success) {
+                                                fetchChurchNames();
+                                            } else {
+                                                alert('Error al salir de la iglesia: ' + res.error);
+                                            }
+                                        }
+                                    }}
+                                    disabled={loadingAction === m.id + '_leave'}
+                                    className="btn btn-danger"
+                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
+                                >
+                                    {loadingAction === m.id + '_leave' ? '...' : 'Salir'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+
                 {/* Join New Account */}
                 <form onSubmit={handleJoin} style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
                     <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>{t('joinNewAccount')}</label>
@@ -178,6 +246,57 @@ const Settings = ({ isOpen, onClose }) => {
                     </div>
                     {joinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>{joinError}</p>}
                 </form>
+
+                {/* Create New Church Option */}
+                {(() => {
+                    const hasJoinedOtherChurch = currentUser?.memberships?.some(m => m.role === 'editor' || m.role === 'viewer');
+                    return (
+                        <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>⛪ Crear Nueva Iglesia</label>
+                            {hasJoinedOtherChurch ? (
+                                <p style={{ fontSize: '0.7rem', color: '#fca5a5', margin: 0, fontStyle: 'italic' }}>
+                                    ⚠️ Ya te has unido a otra iglesia como editor/lector. Debes salirte de ella para poder crear una nueva iglesia.
+                                </p>
+                            ) : (
+                                <div>
+                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                        Registra una nueva congregación y obtén su código de iglesia único.
+                                    </p>
+                                    <form onSubmit={async (e) => {
+                                        e.preventDefault();
+                                        const name = e.target.churchName.value.trim();
+                                        if (!name) return;
+                                        
+                                        setLoadingAction('create_church');
+                                        const res = await createChurch(name);
+                                        setLoadingAction(null);
+                                        if (res.success) {
+                                            e.target.reset();
+                                            fetchChurchNames();
+                                            alert('¡Iglesia creada con éxito!');
+                                        } else {
+                                            alert('Error al crear iglesia: ' + res.error);
+                                        }
+                                    }}>
+                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <input
+                                                type="text"
+                                                name="churchName"
+                                                className="glass-input"
+                                                placeholder="Nombre de la Iglesia"
+                                                required
+                                                style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem' }}
+                                            />
+                                            <button type="submit" disabled={loadingAction === 'create_church'} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>
+                                                {loadingAction === 'create_church' ? '...' : 'Crear'}
+                                            </button>
+                                        </div>
+                                    </form>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })()}
             </div>
 
             {/* Perfil del Usuario: Cumpleaños y Dirección */}

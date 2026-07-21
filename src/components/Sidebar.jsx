@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
 import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check, Shield, X } from 'lucide-react';
 import Settings from './Settings';
+import { supabase } from '../lib/supabase';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose }) => {
     const { templates } = useStorage();
@@ -11,6 +12,35 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isIdCopied, setIsIdCopied] = useState(false);
+    const [churchNames, setChurchNames] = useState({});
+
+    useEffect(() => {
+        const fetchChurchNames = async () => {
+            try {
+                const { data, error } = await supabase
+                    .from('templates')
+                    .select('account_id, custom_fields')
+                    .eq('name', '__church_metadata__');
+
+                if (!error && data) {
+                    const mapping = {};
+                    data.forEach(item => {
+                        const nameField = item.custom_fields?.find(f => f.startsWith('__church_name:'));
+                        if (nameField) {
+                            mapping[item.account_id] = nameField.replace('__church_name:', '');
+                        }
+                    });
+                    setChurchNames(mapping);
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        };
+
+        if (currentUser) {
+            fetchChurchNames();
+        }
+    }, [currentUser]);
 
     const handleCopyId = () => {
         if (!activeAccountId) return;
@@ -24,17 +54,17 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
             <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <div style={{
-                            background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
-                            padding: '0.6rem',
-                            borderRadius: '12px',
-                            boxShadow: '0 8px 16px var(--primary-glow)',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center'
-                        }}>
-                            <Sparkles size={20} color="white" />
-                        </div>
+                        <img 
+                            src="/logo.png" 
+                            alt="VerbumSync Logo" 
+                            style={{
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '8px',
+                                objectFit: 'cover',
+                                boxShadow: '0 4px 12px rgba(99, 102, 241, 0.4)'
+                            }} 
+                        />
                         <span style={{ 
                             fontWeight: 800, 
                             fontSize: '1.5rem', 
@@ -76,7 +106,9 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
                         >
                             {currentUser?.memberships?.map(m => (
-                                <option key={m.id} value={m.id}>{m.id} ({m.role})</option>
+                                <option key={m.id} value={m.id}>
+                                    {churchNames[m.id] ? `${churchNames[m.id]} - ${m.id}` : m.id} ({m.role})
+                                </option>
                             ))}
                         </select>
                         <button 
@@ -125,7 +157,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                     </h3>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        {templates.map(template => (
+                        {templates.filter(t => t.name !== '__church_metadata__').map(template => (
                             <button
                                 key={template.id}
                                 onClick={() => onSelectTemplate(template.id)}
