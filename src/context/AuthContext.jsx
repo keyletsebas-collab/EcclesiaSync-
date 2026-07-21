@@ -25,6 +25,18 @@ const mapUserToObj = (row) => {
         email: m.email || commonEmail
     }));
 
+    // Guarantee user always has access to their own primary church account_id
+    if (row.account_id && !memberships.some(m => m.id === row.account_id)) {
+        memberships.unshift({
+            id: row.account_id,
+            role: row.is_master ? 'master' : 'editor',
+            fullName: commonName,
+            phone: commonPhone,
+            email: commonEmail,
+            expiresAt: null
+        });
+    }
+
     return {
         uid: row.uid,
         username: row.username,
@@ -130,7 +142,7 @@ export const AuthProvider = ({ children }) => {
                     if (activeAccountId && activeAccountId !== updatedUser.accountId) {
                         const stillHasAccess = updatedUser.memberships?.some(m => m.id === activeAccountId);
                         if (!stillHasAccess) {
-                            alert('Tu acceso a esta iglesia ha sido revocado.');
+                            alert(`Se ha revocado tu acceso a esa iglesia. La aplicación te ha asignado automáticamente a tu iglesia propia (ID: ${updatedUser.accountId}).`);
                             console.log('⚠️ Acceso revocado a esta iglesia. Cambiando a cuenta primaria...');
                             setActiveAccountId(updatedUser.accountId);
                         }
