@@ -101,6 +101,49 @@ export const AuthProvider = ({ children }) => {
         }
     }, [currentUser?.uid]);
 
+    // Realtime subscription for users table (instant membership revocation, role updates, and blocking)
+    useEffect(() => {
+        if (!currentUser?.uid) return;
+
+        console.log(`🔌 [AuthContext] Subscribing to realtime updates for user ${currentUser.uid}`);
+        const userChannel = supabase
+            .channel(`user-realtime-${currentUser.uid}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'users'
+            }, (payload) => {
+                console.log('⚡ [AuthContext Realtime] Users table changed in DB:', payload);
+                fetchUsers();
+
+                if (payload.new && payload.new.uid === currentUser.uid) {
+                    const updatedUser = mapUserToObj(payload.new);
+                    setCurrentUser(updatedUser);
+
+                    if (updatedUser.isBlocked) {
+                        alert('Tu cuenta ha sido bloqueada por un administrador.');
+                        setCurrentUser(null);
+                        return;
+                    }
+
+                    // Check if access to current activeAccountId was revoked
+                    if (activeAccountId && activeAccountId !== updatedUser.accountId) {
+                        const stillHasAccess = updatedUser.memberships?.some(m => m.id === activeAccountId);
+                        if (!stillHasAccess) {
+                            alert('Tu acceso a esta iglesia ha sido revocado.');
+                            console.log('⚠️ Acceso revocado a esta iglesia. Cambiando a cuenta primaria...');
+                            setActiveAccountId(updatedUser.accountId);
+                        }
+                    }
+                }
+            })
+            .subscribe();
+
+        return () => {
+            userChannel.unsubscribe();
+        };
+    }, [currentUser?.uid, activeAccountId]);
+
     // Validation: Ensure activeAccountId is always one of the user's memberships
     useEffect(() => {
         if (currentUser && activeAccountId) {
