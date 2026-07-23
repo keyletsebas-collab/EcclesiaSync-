@@ -11,8 +11,8 @@ app.use(cors());
 app.use(express.json());
 
 // ─── Environment Validation ──────────────────────────────────────────────────
-const SUPABASE_URL = process.env.SUPABASE_URL;
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || 'https://hkmmotgmfsfdxyavsozx.supabase.co';
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || 'sb_publishable_Mog0DO6L05Zt6sxaeExArw_J0HZ3f6L';
 
 if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
     console.error('❌ CRITICAL: Missing Supabase configuration');
@@ -46,6 +46,19 @@ async function autoJoinTemplates(accountId, name, phone) {
                 const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
                 const nextNumber = maxNumber + 1;
                 
+                const isPoetry = template.customFields?.includes('__poetry__');
+                const isSonido = template.customFields?.includes('__sonido__');
+                const identifications = isPoetry
+                    ? { isParticipant: true }
+                    : isSonido
+                        ? { hasKey: false }
+                        : {
+                            familyRole: '',
+                            familyName: '',
+                            hasKey: false,
+                            needsPrayer: false
+                        };
+
                 const newMember = {
                     id: uuidv4(),
                     templateId: template.id,
@@ -53,12 +66,7 @@ async function autoJoinTemplates(accountId, name, phone) {
                     name: name.trim(),
                     number: nextNumber,
                     phone: phone?.trim() || '',
-                    identifications: {
-                        familyRole: '',
-                        familyName: '',
-                        hasKey: false,
-                        needsPrayer: false
-                    },
+                    identifications,
                     createdAt: new Date().toISOString()
                 };
                 await storage.addMember(newMember);
@@ -176,9 +184,6 @@ app.post('/api/auth/signup', async (req, res) => {
 
         const newUser = { uid, username, password, isMaster: !!isMaster, accountId, createdAt, memberships };
         await storage.addUser(newUser);
-
-        // Auto join all templates of this account with the new user's name
-        await autoJoinTemplates(accountId, fullName || username, phone);
 
         res.json({ success: true, accountId, username, isMaster: newUser.isMaster, uid, memberships });
     } catch (err) {
@@ -332,9 +337,6 @@ app.post('/api/auth/accounts/join', async (req, res) => {
             email: user.username
         });
         await storage.updateUser(uid, { memberships });
-
-        // Auto join all templates of this account with the user's name
-        await autoJoinTemplates(accountId, name, phone);
 
         res.json({ success: true, memberships });
     } catch (err) {

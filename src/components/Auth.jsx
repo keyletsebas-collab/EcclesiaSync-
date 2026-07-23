@@ -11,6 +11,7 @@ const Auth = () => {
     const [password, setPassword] = useState('');
     const [fullName, setFullName] = useState('');
     const [phone, setPhone] = useState('');
+    const [birthday, setBirthday] = useState('');
     const [accountId, setAccountId] = useState(''); // NEW: for joining existing account
     const [churchName, setChurchName] = useState('');
     const [error, setError] = useState('');
@@ -41,7 +42,7 @@ const Auth = () => {
         try {
             const result = isLogin
                 ? await login(username, password)
-                : await signup(username, password, username.toLowerCase().trim() === 'keylet', accountId, fullName, phone, churchName);
+                : await signup(username, password, username.toLowerCase().trim() === 'keylet', accountId, fullName, phone, churchName, birthday);
 
             if (!result.success) {
                 if (result.isDuplicate) {
@@ -134,6 +135,17 @@ const Auth = () => {
                                     onChange={(e) => setPhone(e.target.value)}
                                     placeholder="Ej: +1 555-1234"
                                     required
+                                />
+                            </div>
+                            <div className="input-group" style={{ marginBottom: '1rem' }}>
+                                <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
+                                    Fecha de Cumpleaños (Opcional)
+                                </label>
+                                <input
+                                    type="date"
+                                    className="glass-input"
+                                    value={birthday}
+                                    onChange={(e) => setBirthday(e.target.value)}
                                 />
                             </div>
                         </>

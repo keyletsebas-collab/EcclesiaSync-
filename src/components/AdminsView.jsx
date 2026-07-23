@@ -18,6 +18,22 @@ const AdminsView = () => {
     const [loadingChurches, setLoadingChurches] = useState(false);
     const [editingChurchCode, setEditingChurchCode] = useState(null);
     const [editChurchName, setEditChurchName] = useState('');
+    const [globalSearch, setGlobalSearch] = useState('');
+    const [grantStates, setGrantStates] = useState({}); // uid -> { churchCode, role, durationType, expiresAt }
+
+    const handleGrantStateChange = (uid, field, value) => {
+        setGrantStates(prev => ({
+            ...prev,
+            [uid]: {
+                churchCode: targetAccountId,
+                role: 'viewer',
+                durationType: 'indefinite',
+                expiresAt: '',
+                ...(prev[uid] || {}),
+                [field]: value
+            }
+        }));
+    };
 
     const fetchChurches = async () => {
         setLoadingChurches(true);
@@ -73,6 +89,94 @@ const AdminsView = () => {
             console.error(err);
         } finally {
             setLoadingChurches(false);
+        }
+    };
+
+    const handleDeleteChurch = async (churchCode) => {
+        if (!window.confirm(`¿Estás completamente seguro de eliminar esta iglesia (${churchCode})? Esta acción eliminará permanentemente la iglesia, todas sus plantillas, miembros, salidas, transacciones e información asociada. Esta acción no se puede deshacer.`)) {
+            return;
+        }
+        
+        try {
+            // Delete church metadata
+            await supabase
+                .from('templates')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Delete all templates under this account
+            await supabase
+                .from('templates')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Delete all members under this account
+            await supabase
+                .from('members')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Delete all services under this account
+            await supabase
+                .from('services')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Delete all transactions under this account
+            await supabase
+                .from('transactions')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Delete all programs under this account
+            await supabase
+                .from('programs')
+                .delete()
+                .eq('account_id', churchCode);
+
+            // Clean up users' memberships/accountId associated with this church
+            const { data: dbUsers, error: usersErr } = await supabase
+                .from('users')
+                .select('*');
+
+            if (!usersErr && dbUsers) {
+                for (const u of dbUsers) {
+                    let needsUpdate = false;
+                    let updatedAccountId = u.accountId;
+                    let updatedMemberships = u.memberships || [];
+
+                    if (u.accountId === churchCode) {
+                        updatedAccountId = '';
+                        needsUpdate = true;
+                    }
+
+                    const filteredMemberships = updatedMemberships.filter(m => m.id !== churchCode);
+                    if (filteredMemberships.length !== updatedMemberships.length) {
+                        updatedMemberships = filteredMemberships;
+                        needsUpdate = true;
+                    }
+
+                    if (needsUpdate) {
+                        await supabase
+                            .from('users')
+                            .update({
+                                accountId: updatedAccountId,
+                                memberships: updatedMemberships
+                            })
+                            .eq('uid', u.uid);
+                    }
+                }
+            }
+
+            setSuccessMessage(`La iglesia (${churchCode}) ha sido eliminada por completo.`);
+            setTimeout(() => setSuccessMessage(''), 3000);
+            if (selectedChurchCode === churchCode) {
+                setSelectedChurchCode(null);
+            }
+            fetchChurches();
+        } catch (err) {
+            console.error('Error deleting church:', err);
+            alert('Error al eliminar la iglesia: ' + err.message);
         }
     };
 
@@ -141,60 +245,24 @@ const AdminsView = () => {
         }
 
         try {
-            if (role === 'remove') {
-                const updatedMemberships = (user.memberships || []).filter(m => m.id !== targetAccountId);
-                await updateUserRole(user.uid, { memberships: updatedMemberships });
-
-                // Also cascade delete from members table for this account
-                const namesToDelete = new Set();
-                const phonesToDelete = new Set();
-
-                if (user.username) {
-                    namesToDelete.add(user.username.toLowerCase().trim());
-                }
-
-                // Get the user's fullName and phone for the targetAccountId membership before removing it
-                const targetMembership = (user.memberships || []).find(m => m.id === targetAccountId);
-                if (targetMembership) {
-                    if (targetMembership.fullName) namesToDelete.add(targetMembership.fullName.toLowerCase().trim());
-                    if (targetMembership.phone) phonesToDelete.add(targetMembership.phone.trim());
-                }
-
-                // Delete members from the members table for targetAccountId
-                const { data: allMembers, error: memFetchErr } = await supabase
-                    .from('members')
-                    .select('id, name, phone')
-                    .eq('account_id', targetAccountId);
-
-                if (!memFetchErr && allMembers) {
-                    const idsToDelete = allMembers
-                        .filter(m => {
-                            const nameLower = m.name?.toLowerCase().trim();
-                            const phoneTrim = m.phone?.trim() || '';
-                            const matchesName = namesToDelete.has(nameLower);
-                            const matchesPhone = phoneTrim && phonesToDelete.has(phoneTrim);
-                            return matchesName || matchesPhone;
-                        })
-                        .map(m => m.id);
-
-                    if (idsToDelete.length > 0) {
-                        const { error: memDelErr } = await supabase
-                            .from('members')
-                            .delete()
-                            .in('id', idsToDelete);
-                        if (memDelErr) console.error('Failed to delete associated members:', memDelErr);
-                    }
-                }
-            } else {
-                await updateMembershipRole(user.uid, targetAccountId, role, expiresAtIso);
+            const res = await updateMembershipRole(user.uid, targetAccountId, role, expiresAtIso);
+            if (res && res.success === false) {
+                alert(`Error al actualizar rol: ${res.error}`);
+                return;
             }
+
+            setEditStates(prev => {
+                const next = { ...prev };
+                delete next[user.uid];
+                return next;
+            });
             
             setSuccessMessage(`Rol de ${user.username} actualizado correctamente.`);
             setTimeout(() => setSuccessMessage(''), 3000);
             await fetchUsers();
         } catch (err) {
-            console.error('Error saving role:', err);
-            alert('Error al guardar el rol del usuario.');
+            console.error(err);
+            alert(`Error inesperado: ${err.message || err}`);
         }
     };
 
@@ -377,6 +445,21 @@ const AdminsView = () => {
                                                     style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)' }}
                                                 >
                                                     🔍 Ver Usuarios
+                                                </button>
+                                                <button
+                                                    onClick={() => handleDeleteChurch(c.code)}
+                                                    className="btn"
+                                                    style={{ 
+                                                        padding: '0.25rem 0.5rem', 
+                                                        fontSize: '0.75rem', 
+                                                        background: 'rgba(239, 68, 68, 0.1)', 
+                                                        border: '1px solid rgba(239, 68, 68, 0.2)',
+                                                        color: '#f87171' 
+                                                    }}
+                                                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
+                                                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
+                                                >
+                                                    🗑️ Eliminar Iglesia
                                                 </button>
                                             </div>
                                         </div>
@@ -623,8 +706,16 @@ const AdminsView = () => {
                                                         color: '#fca5a5'
                                                     }}
                                                     onClick={async () => {
-                                                        const updatedMemberships = (user.memberships || []).filter(m => m.id !== targetAccountId);
-                                                        await updateUserRole(user.uid, { memberships: updatedMemberships });
+                                                        const res = await updateMembershipRole(user.uid, targetAccountId, 'remove', null);
+                                                        if (res && res.success === false) {
+                                                            alert(`Error al quitar acceso: ${res.error}`);
+                                                            return;
+                                                        }
+                                                        setEditStates(prev => {
+                                                            const next = { ...prev };
+                                                            delete next[user.uid];
+                                                            return next;
+                                                        });
                                                         setSuccessMessage(`Acceso revocado para ${user.username}.`);
                                                         setTimeout(() => setSuccessMessage(''), 3000);
                                                         await fetchUsers();
@@ -646,7 +737,16 @@ const AdminsView = () => {
                                                         color: '#34d399'
                                                     }}
                                                     onClick={async () => {
-                                                        await updateMembershipRole(user.uid, targetAccountId, 'viewer', null);
+                                                        const res = await updateMembershipRole(user.uid, targetAccountId, 'viewer', null);
+                                                        if (res && res.success === false) {
+                                                            alert(`Error al dar acceso: ${res.error}`);
+                                                            return;
+                                                        }
+                                                        setEditStates(prev => {
+                                                            const next = { ...prev };
+                                                            delete next[user.uid];
+                                                            return next;
+                                                        });
                                                         setSuccessMessage(`Acceso concedido (Viewer) para ${user.username}.`);
                                                         setTimeout(() => setSuccessMessage(''), 3000);
                                                         await fetchUsers();
@@ -740,6 +840,217 @@ const AdminsView = () => {
                             </div>
                         );
                     })}
+                </div>
+            </div>
+
+            {/* SECTION 2: Global User Directory and Cross-Church Access Management */}
+            <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '2rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+                    <div>
+                        <h3 style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.5rem',
+                            fontSize: '1.1rem',
+                            fontWeight: 600,
+                            margin: 0
+                        }}>
+                            🌐 Directorio Global de Todos los Usuarios ({users.length})
+                        </h3>
+                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                            Concede o revoca acceso a cualquier iglesia del sistema para cualquier usuario sin importar su iglesia de origen.
+                        </p>
+                    </div>
+
+                    <input
+                        type="text"
+                        className="glass-input"
+                        placeholder="🔍 Buscar por nombre o ID de cuenta..."
+                        value={globalSearch}
+                        onChange={e => setGlobalSearch(e.target.value)}
+                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', width: '280px' }}
+                    />
+                </div>
+
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    {users
+                        .filter(u => {
+                            if (!globalSearch.trim()) return true;
+                            const query = globalSearch.toLowerCase().trim();
+                            const matchesName = u.username?.toLowerCase().includes(query);
+                            const matchesAccount = u.accountId?.toLowerCase().includes(query);
+                            const matchesMembership = u.memberships?.some(m => m.id?.toLowerCase().includes(query));
+                            return matchesName || matchesAccount || matchesMembership;
+                        })
+                        .map(user => {
+                            const isThisUserCurrentUser = user.uid === currentUser?.uid;
+                            const gState = grantStates[user.uid] || { churchCode: targetAccountId, role: 'viewer', durationType: 'indefinite', expiresAt: '' };
+
+                            return (
+                                <div key={`global-${user.uid}`} style={{
+                                    padding: '1.25rem',
+                                    background: 'rgba(15, 23, 42, 0.4)',
+                                    borderRadius: '12px',
+                                    border: '1px solid var(--border)',
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    gap: '1rem'
+                                }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                                        {/* User Main Info */}
+                                        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                                                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-main)' }}>{user.username}</span>
+                                                {isThisUserCurrentUser && (
+                                                    <span style={{ background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600 }}>Tú</span>
+                                                )}
+                                                {user.isMaster && (
+                                                    <span style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                        <Crown size={10} /> MASTER GLOBAL
+                                                    </span>
+                                                )}
+                                                {user.isBlocked && (
+                                                    <span style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600 }}>Bloqueado</span>
+                                                )}
+                                            </div>
+
+                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                <div>ID Primario: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{user.accountId}</span></div>
+                                            </div>
+
+                                            {/* Memberships Badges with instant Remove button */}
+                                            <div style={{ marginTop: '0.5rem' }}>
+                                                <span style={{ fontWeight: 600, display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Iglesias con Acceso Concedido:</span>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                                    {(user.memberships || []).map((m, idx) => (
+                                                        <div key={idx} style={{
+                                                            background: 'rgba(99, 102, 241, 0.15)',
+                                                            border: '1px solid rgba(99, 102, 241, 0.3)',
+                                                            padding: '0.2rem 0.5rem',
+                                                            borderRadius: '6px',
+                                                            fontSize: '0.7rem',
+                                                            display: 'flex',
+                                                            alignItems: 'center',
+                                                            gap: '0.4rem'
+                                                        }}>
+                                                            <span>📁 {m.id} ({m.role})</span>
+                                                            <button
+                                                                title={`Quitar acceso a la iglesia ${m.id}`}
+                                                                style={{
+                                                                    background: 'rgba(239, 68, 68, 0.2)',
+                                                                    border: 'none',
+                                                                    color: '#fca5a5',
+                                                                    borderRadius: '50%',
+                                                                    width: '18px',
+                                                                    height: '18px',
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    justifyContent: 'center',
+                                                                    cursor: 'pointer',
+                                                                    fontSize: '0.7rem',
+                                                                    padding: 0
+                                                                }}
+                                                                onClick={async () => {
+                                                                    if (window.confirm(`¿Quitar acceso de ${user.username} a la iglesia ${m.id}?`)) {
+                                                                        const res = await updateMembershipRole(user.uid, m.id, 'remove', null);
+                                                                        if (res && res.success === false) {
+                                                                            alert(`Error: ${res.error}`);
+                                                                            return;
+                                                                        }
+                                                                        setSuccessMessage(`Acceso revocado a ${m.id} para ${user.username}.`);
+                                                                        setTimeout(() => setSuccessMessage(''), 3000);
+                                                                        await fetchUsers();
+                                                                    }
+                                                                }}
+                                                            >
+                                                                ✕
+                                                            </button>
+                                                        </div>
+                                                    ))}
+                                                    {(user.memberships || []).length === 0 && <span style={{ fontStyle: 'italic', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ninguna iglesia asignada</span>}
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Grant Access Form */}
+                                        <div style={{
+                                            flex: '1 1 300px',
+                                            minWidth: 0,
+                                            background: 'rgba(255, 255, 255, 0.02)',
+                                            border: '1px solid var(--border)',
+                                            borderRadius: '8px',
+                                            padding: '1rem',
+                                            display: 'flex',
+                                            flexDirection: 'column',
+                                            gap: '0.75rem'
+                                        }}>
+                                            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                <Key size={14} color="var(--primary)" />
+                                                Conceder Acceso a Iglesia
+                                            </div>
+
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                                {/* Select or type Church ID */}
+                                                <div style={{ flex: '1 1 140px' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Seleccionar Iglesia</label>
+                                                    <select
+                                                        className="glass-input"
+                                                        style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                        value={gState.churchCode}
+                                                        onChange={e => handleGrantStateChange(user.uid, 'churchCode', e.target.value)}
+                                                    >
+                                                        {churches.map(c => (
+                                                            <option key={c.code} value={c.code}>
+                                                                {c.name} ({c.code})
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                {/* Role Selector */}
+                                                <div style={{ flex: '1 1 120px' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Rol a Asignar</label>
+                                                    <select
+                                                        className="glass-input"
+                                                        style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                        value={gState.role}
+                                                        onChange={e => handleGrantStateChange(user.uid, 'role', e.target.value)}
+                                                    >
+                                                        <option value="viewer">👁️ Viewer (Lectura)</option>
+                                                        <option value="editor">✍️ Editor (Escritura)</option>
+                                                        <option value="master">👑 Master (Admin)</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            {/* Submit Grant Access Button */}
+                                            <button
+                                                className="btn btn-primary"
+                                                style={{
+                                                    padding: '0.45rem 1rem',
+                                                    fontSize: '0.8rem',
+                                                    justifyContent: 'center',
+                                                    marginTop: '0.25rem'
+                                                }}
+                                                onClick={async () => {
+                                                    const targetChurch = gState.churchCode || targetAccountId;
+                                                    const res = await updateMembershipRole(user.uid, targetChurch, gState.role, null);
+                                                    if (res && res.success === false) {
+                                                        alert(`Error al conceder acceso: ${res.error}`);
+                                                        return;
+                                                    }
+                                                    setSuccessMessage(`Acceso (${gState.role}) concedido a ${targetChurch} para ${user.username}.`);
+                                                    setTimeout(() => setSuccessMessage(''), 3000);
+                                                    await fetchUsers();
+                                                }}
+                                            >
+                                                🔓 Conceder Acceso a {gState.churchCode || targetAccountId}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
                 </div>
             </div>
         </div>

@@ -1,10 +1,47 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
-
+import notificationService from '../utils/NotificationService';
 const AuthContext = createContext();
 
 export const useAuth = () => {
     return useContext(AuthContext);
+};
+
+// Helper to extract all name variations (username, fullNames, email prefixes, accent-stripped) and phones for matching members
+const getNamesAndPhonesForUser = (userObj) => {
+    const names = new Set();
+    const phones = new Set();
+
+    if (!userObj) return { names, phones };
+
+    const addNormalized = (str) => {
+        if (!str || typeof str !== 'string') return;
+        const trimmed = str.toLowerCase().trim();
+        if (!trimmed) return;
+
+        names.add(trimmed);
+
+        if (trimmed.includes('@')) {
+            const prefix = trimmed.split('@')[0].trim();
+            if (prefix) {
+                names.add(prefix);
+                const noAccents = prefix.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+                names.add(noAccents);
+            }
+        } else {
+            const noAccents = trimmed.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+            names.add(noAccents);
+        }
+    };
+
+    addNormalized(userObj.username);
+
+    (userObj.memberships || []).forEach(m => {
+        addNormalized(m.fullName);
+        if (m.phone?.trim()) phones.add(m.phone.trim());
+    });
+
+    return { names, phones };
 };
 
 // Helper to convert DB user row to app user object
@@ -25,7 +62,7 @@ const mapUserToObj = (row) => {
         email: m.email || commonEmail
     }));
 
-    // Guarantee user always has access to their own primary church account_id
+    // Guarantee user has their primary church account_id in memberships list
     if (row.account_id && !memberships.some(m => m.id === row.account_id)) {
         memberships.unshift({
             id: row.account_id,
@@ -127,9 +164,31 @@ export const AuthProvider = ({ children }) => {
             }, (payload) => {
                 console.log('⚡ [AuthContext Realtime] Users table changed in DB:', payload);
                 fetchUsers();
-
                 if (payload.new && payload.new.uid === currentUser.uid) {
                     const updatedUser = mapUserToObj(payload.new);
+
+                    // Compare memberships to detect kicks, joins, and role updates
+                    const oldMemberships = currentUser.memberships || [];
+                    const newMemberships = updatedUser.memberships || [];
+
+                    // 1. Detect if kicked from a church
+                    const lostMemberships = oldMemberships.filter(om => !newMemberships.some(nm => nm.id === om.id));
+                    if (lostMemberships.length > 0) {
+                        lostMemberships.forEach(lm => {
+                            notificationService.notifyKickedFromChurch(lm.id);
+                        });
+                    }
+
+                    // 2. Detect joins or role updates (admin, editor, viewer)
+                    newMemberships.forEach(nm => {
+                        const om = oldMemberships.find(o => o.id === nm.id);
+                        if (om && om.role !== nm.role) {
+                            notificationService.notifyRoleChanged(nm.id, nm.role);
+                        } else if (!om) {
+                            notificationService.notifyJoinedChurch(nm.id, nm.role);
+                        }
+                    });
+
                     setCurrentUser(updatedUser);
 
                     if (updatedUser.isBlocked) {
@@ -233,7 +292,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '', churchName = '') => {
+    const signup = async (email, password, isMaster = false, accountId = null, fullName = '', phone = '', churchName = '', birthday = null) => {
         try {
             const username = email?.toLowerCase().trim();
 
@@ -288,7 +347,8 @@ export const AuthProvider = ({ children }) => {
                 account_id: finalAccountId,
                 created_at: createdAt,
                 is_blocked: false,
-                memberships
+                memberships,
+                birthday: birthday ? birthday.trim() : null
             };
 
             const { error: insErr } = await supabase.from('users').insert([newUserRow]);
@@ -311,9 +371,6 @@ export const AuthProvider = ({ children }) => {
             const mappedUser = mapUserToObj(newUserRow);
             setCurrentUser(mappedUser);
             setActiveAccountId(finalAccountId);
-
-            // Auto join templates in the background
-            autoJoinTemplates(finalAccountId, fullName || username, phone);
 
             return { success: true };
         } catch (err) {
@@ -417,6 +474,7 @@ export const AuthProvider = ({ children }) => {
             // Cascade delete the associated members in templates
             if (userToDelete) {
                 const mappedUser = mapUserToObj(userToDelete);
+                const { names, phones } = getNamesAndPhonesForUser(mappedUser);
 
                 // Delete members from the members table
                 const { data: allMembers, error: memFetchErr } = await supabase
@@ -427,19 +485,13 @@ export const AuthProvider = ({ children }) => {
                     const idsToDelete = allMembers
                         .filter(m => {
                             const nameLower = m.name?.toLowerCase().trim();
+                            const nameNoAccents = nameLower ? nameLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
                             const phoneTrim = m.phone?.trim() || '';
 
-                            // Match membership name AND phone
-                            const matchesMembership = (mappedUser.memberships || []).some(mem => {
-                                const memName = mem.fullName?.toLowerCase().trim();
-                                const memPhone = mem.phone?.trim() || '';
-                                return nameLower === memName && phoneTrim === memPhone;
-                            });
+                            const matchesName = names.has(nameLower) || names.has(nameNoAccents);
+                            const matchesPhone = phoneTrim && phones.has(phoneTrim);
 
-                            // Match username directly (e.g. if they didn't have memberships but signed up with this username)
-                            const matchesUsername = nameLower === mappedUser.username.toLowerCase().trim();
-
-                            return matchesMembership || matchesUsername;
+                            return matchesName || matchesPhone;
                         })
                         .map(m => m.id);
 
@@ -493,8 +545,6 @@ export const AuthProvider = ({ children }) => {
             const updatedUser = { ...currentUser, memberships };
             setCurrentUser(updatedUser);
             setActiveAccountId(cleanAccountId);
-
-            autoJoinTemplates(cleanAccountId, name, phone);
 
             return { success: true };
         } catch (err) {
@@ -575,9 +625,10 @@ export const AuthProvider = ({ children }) => {
     const updateMembershipRole = async (targetUid, accountId, role, expiresAt) => {
         if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
-            // Check if current user is master of this account
+            // Check if current user is master or super admin of this account
+            const isSuperAdmin = currentUser.username?.toLowerCase().trim() === 'keylet';
             const myMembership = currentUser.memberships?.find(m => m.id === accountId);
-            if (!currentUser.isMaster && myMembership?.role !== 'master') {
+            if (!isSuperAdmin && !currentUser.isMaster && myMembership?.role !== 'master') {
                 return { success: false, error: 'Only Master of this account can manage roles' };
             }
 
@@ -592,21 +643,25 @@ export const AuthProvider = ({ children }) => {
             if (!targetRow) return { success: false, error: 'Target user not found' };
 
             const targetUser = mapUserToObj(targetRow);
-            const memberships = [...(targetUser.memberships || [])];
-            const index = memberships.findIndex(m => m.id === accountId);
+            let memberships = [...(targetUser.memberships || [])];
 
-            const oldMembership = index >= 0 ? memberships[index] : {};
-            const newMembership = {
-                ...oldMembership,
-                id: accountId,
-                role,
-                expiresAt: expiresAt || null
-            };
-
-            if (index >= 0) {
-                memberships[index] = newMembership;
+            if (role === 'remove') {
+                memberships = memberships.filter(m => m.id !== accountId);
             } else {
-                memberships.push(newMembership);
+                const index = memberships.findIndex(m => m.id === accountId);
+                const oldMembership = index >= 0 ? memberships[index] : {};
+                const newMembership = {
+                    ...oldMembership,
+                    id: accountId,
+                    role,
+                    expiresAt: expiresAt || null
+                };
+
+                if (index >= 0) {
+                    memberships[index] = newMembership;
+                } else {
+                    memberships.push(newMembership);
+                }
             }
 
             const { error: updErr } = await supabase
@@ -615,6 +670,35 @@ export const AuthProvider = ({ children }) => {
                 .eq('uid', targetUid);
 
             if (updErr) throw updErr;
+
+            // Cascade delete members matching this user in members table for this account
+            if (role === 'remove') {
+                const { names, phones } = getNamesAndPhonesForUser(targetUser);
+
+                const { data: allMembers } = await supabase
+                    .from('members')
+                    .select('id, name, phone')
+                    .eq('account_id', accountId);
+
+                if (allMembers) {
+                    const idsToDelete = allMembers
+                        .filter(m => {
+                            const nameLower = m.name?.toLowerCase().trim();
+                            const nameNoAccents = nameLower ? nameLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "") : '';
+                            const phoneTrim = m.phone?.trim() || '';
+
+                            const matchesName = names.has(nameLower) || names.has(nameNoAccents);
+                            const matchesPhone = phoneTrim && phones.has(phoneTrim);
+
+                            return matchesName || matchesPhone;
+                        })
+                        .map(m => m.id);
+
+                    if (idsToDelete.length > 0) {
+                        await supabase.from('members').delete().in('id', idsToDelete);
+                    }
+                }
+            }
 
             await fetchUsers();
             return { success: true };

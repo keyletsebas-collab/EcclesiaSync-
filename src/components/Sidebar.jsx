@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useStorage } from '../context/StorageContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useAuth } from '../context/AuthContext';
-import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, Sparkles, Copy, Check, Shield, X } from 'lucide-react';
+import { Users, FolderPlus, FileText, Settings as SettingsIcon, ChevronRight, ChevronLeft, Sparkles, Copy, Check, Shield, X } from 'lucide-react';
 import Settings from './Settings';
 import { supabase } from '../lib/supabase';
 
-const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose }) => {
+const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     const { templates } = useStorage();
     const { currentUser, activeAccountId, setActiveAccountId, canEdit, users, updateUserRole, deleteUser } = useAuth();
     const { t } = useLanguage();
@@ -51,7 +51,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
 
     return (
         <>
-            <aside className={`sidebar ${isOpen ? 'open' : ''}`}>
+            <aside className={`sidebar ${isOpen ? 'open' : ''} ${isCollapsed ? 'collapsed' : ''}`}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1.5rem', padding: '0 0.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                         <img 
@@ -76,6 +76,34 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             VerbumSync
                         </span>
                     </div>
+                    {/* Desktop Collapse Button */}
+                    <button
+                        onClick={onToggleCollapse}
+                        className="desktop-sidebar-collapse-btn"
+                        style={{
+                            background: 'transparent',
+                            border: 'none',
+                            color: 'var(--text-muted)',
+                            cursor: 'pointer',
+                            padding: '0.25rem',
+                            borderRadius: '8px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            transition: 'background 0.2s, color 0.2s'
+                        }}
+                        onMouseOver={(e) => {
+                            e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                            e.currentTarget.style.color = 'var(--text-main)';
+                        }}
+                        onMouseOut={(e) => {
+                            e.currentTarget.style.background = 'transparent';
+                            e.currentTarget.style.color = 'var(--text-muted)';
+                        }}
+                        title="Ocultar barra lateral"
+                    >
+                        <ChevronLeft size={20} />
+                    </button>
                     {/* Mobile Close Button */}
                     <button 
                         onClick={onClose} 
@@ -195,7 +223,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                 </div>
 
                 <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {templates.length > 0 && currentUser?.username?.toLowerCase() === 'keylet' && (
+                    {templates.length > 0 && (
                         <button
                             onClick={onSelectHistory}
                             style={{

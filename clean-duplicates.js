@@ -1,3 +1,13 @@
+// Polyfill WebSocket for Node.js environments below v22
+if (typeof globalThis.WebSocket === 'undefined') {
+    try {
+        const wsModule = await import('ws');
+        globalThis.WebSocket = wsModule.default || wsModule;
+    } catch (e) {
+        console.warn('⚠️ WebSockets not available');
+    }
+}
+
 import { storage } from './api/storage.js';
 import dotenv from 'dotenv';
 dotenv.config();

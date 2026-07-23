@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import { useAuth } from './AuthContext';
 import { supabase } from '../lib/supabase';
+import notificationService from '../utils/NotificationService';
 
 const StorageContext = createContext();
 
@@ -64,7 +65,7 @@ const mapProgramToObj = (row) => {
 };
 
 export const StorageProvider = ({ children, accountId: propAccountId }) => {
-    const { currentUser, activeAccountId } = useAuth();
+    const { currentUser, activeAccountId, users } = useAuth();
 
     // Helper para generar UUID válidos en cualquier entorno (incluso sin HTTPS)
     const generateUUID = () => {
@@ -88,7 +89,129 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     // Cooldown trackers
     const lastAddTemplateNameRef = useRef('');
     const lastAddTemplateTimeRef = useRef(0);
+    const channelRef = useRef(null);
 
+    const processRealtimeService = (service) => {
+        if (!service || service.account_id !== accountId) return;
+
+        // Parse serviceType (could be a JSON string like {"type":"Poesía","media":[],"isFinished":true})
+        const rawServiceType = service.service_type || 'Servicio';
+        let serviceType = rawServiceType;
+        let isFinished = false;
+        try {
+            const parsed = JSON.parse(rawServiceType);
+            if (parsed && typeof parsed === 'object') {
+                if (parsed.type !== undefined) serviceType = parsed.type;
+                if (parsed.isFinished) isFinished = true;
+            }
+        } catch (e) {}
+
+        if (isFinished) {
+            console.log('🚫 Outing/Service program is marked as finished ("Se acabó el programa"). Skipping notifications.');
+            return;
+        }
+        // Parse program (could be a JSON string like {"poems":[],"notes":""})
+        const rawProgram = service.program || '';
+        let program = rawProgram;
+        try {
+            const parsed = JSON.parse(rawProgram);
+            if (parsed && typeof parsed === 'object') {
+                program = parsed.notes || '';
+            }
+        } catch (e) {}
+
+        const serviceDate = service.service_date || '';
+        const assignedMembers = typeof service.assigned_members === 'string'
+            ? JSON.parse(service.assigned_members)
+            : service.assigned_members || [];
+        const lowerType = serviceType.toLowerCase();
+        const lowerProgram = program.toLowerCase();
+        const template = templates.find(t => t.id === service.template_id);
+        const templateName = template ? template.name.toLowerCase() : '';
+        const isCampaign = lowerType.includes('campaña') || lowerType.includes('campana') || lowerProgram.includes('campaña') || lowerProgram.includes('campana') || templateName.includes('campaña') || templateName.includes('campana');
+        
+        const isRehearsal = lowerType.includes('ensayo') || lowerType.includes('ensayos') || lowerType.includes('practica') || lowerType.includes('práctica') || lowerType.includes('practicas') || lowerType.includes('prácticas') || lowerType.includes('ensayar') ||
+                            lowerProgram.includes('ensayo') || lowerProgram.includes('ensayos') || lowerProgram.includes('practica') || lowerProgram.includes('práctica') || lowerProgram.includes('practicas') || lowerProgram.includes('prácticas') || lowerProgram.includes('ensayar') ||
+                            templateName.includes('ensayo') || templateName.includes('ensayos') || templateName.includes('practica') || templateName.includes('práctica') || templateName.includes('practicas') || templateName.includes('prácticas') || templateName.includes('ensayar');
+        
+        const isOuting = !isRehearsal && (lowerType.includes('salida') || lowerType.includes('salidas') || lowerProgram.includes('salida') || lowerProgram.includes('salidas') || templateName.includes('salida') || templateName.includes('salidas'));
+        
+        const isPoetry = lowerType.includes('poesía') || lowerType.includes('poesia') || templateName.includes('poesía') || templateName.includes('poesia');
+        const isUserAssigned = assignedMembers?.some(m => m.name?.toLowerCase() === currentUser?.username?.toLowerCase()) || service.member_name?.toLowerCase() === currentUser?.username?.toLowerCase();
+
+        if (isPoetry) {
+            notificationService.notifyPoetryCreated(
+                serviceType,
+                serviceDate,
+                service.program
+            );
+        } else if (isRehearsal) {
+            notificationService.notifyRehearsalOrOutingCreated(
+                serviceType && !serviceType.toLowerCase().includes('ensayo') ? `Ensayo (${serviceType})` : (serviceType || 'Ensayo'),
+                `Fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`,
+                false
+            );
+        } else if (isOuting) {
+            notificationService.notifyRehearsalOrOutingCreated(
+                serviceType && !serviceType.toLowerCase().includes('salida') ? `Salida (${serviceType})` : (serviceType || 'Salida'),
+                `Fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`,
+                true
+            );
+        } else {
+            notificationService.notifyCampaignOrAssignment({
+                serviceDate,
+                assignedMembers: assignedMembers || [],
+                serviceType,
+                program,
+                isCampaign
+            });
+        }
+    };
+
+    const processRealtimeProgram = (prog) => {
+        if (!prog || prog.account_id !== accountId) return;
+        notificationService.notifyProgramCreated(prog.title, prog.content);
+    };
+
+    const processRealtimeTemplate = (newTemplateRow) => {
+        if (!newTemplateRow || newTemplateRow.account_id !== accountId) return;
+
+        // Find existing template in state to compare
+        const oldTemplate = templates.find(t => t.id === newTemplateRow.id);
+        if (!oldTemplate) return;
+
+        // Extract schedules from old and new
+        const oldSchedulesField = (oldTemplate.customFields || []).find(f => f && typeof f === 'string' && f.startsWith('__rehearsalSchedules:'));
+        let newCustomFields = [];
+        if (typeof newTemplateRow.custom_fields === 'string') {
+            try {
+                newCustomFields = JSON.parse(newTemplateRow.custom_fields);
+            } catch (e) {}
+        } else {
+            newCustomFields = newTemplateRow.custom_fields || [];
+        }
+        if (!Array.isArray(newCustomFields)) {
+            newCustomFields = [];
+        }
+        const newSchedulesField = newCustomFields.find(f => f && typeof f === 'string' && f.startsWith('__rehearsalSchedules:'));
+
+        if (newSchedulesField && newSchedulesField !== oldSchedulesField) {
+            // Rehearsal schedules changed! Trigger notification.
+            try {
+                const schedStr = newSchedulesField.replace('__rehearsalSchedules:', '');
+                const validSchedules = JSON.parse(schedStr);
+                if (validSchedules && validSchedules.length > 0) {
+                    const schedDesc = validSchedules.map(s => `${s.days} a las ${s.time} (${s.modality})`).join(', ');
+                    notificationService.notifyRehearsalOrOutingCreated(
+                        `Horario de Ensayos Actualizado (${newTemplateRow.name || oldTemplate.name})`,
+                        `Días de ensayo: ${schedDesc}`
+                    );
+                }
+            } catch (e) {
+                console.error('Error parsing updated rehearsal schedules:', e);
+            }
+        }
+    };
     const fetchData = async () => {
         if (!accountId) return;
         setLoading(true);
@@ -119,10 +242,37 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 programas: pData.length
             });
 
+            // Check if user was kicked from a template
+            if (currentUser && members.length > 0) {
+                const activeUserFullName = currentUser?.username?.toLowerCase().trim() || '';
+                const userMemberships = currentUser?.memberships?.map(m => m.fullName?.toLowerCase().trim()).filter(Boolean) || [];
+                const isUserMatch = (name) => {
+                    if (!name) return false;
+                    const normalized = name.toLowerCase().trim();
+                    return normalized === activeUserFullName || userMemberships.includes(normalized);
+                };
+
+                const wasInTemplates = members.filter(m => isUserMatch(m.name)).map(m => m.templateId);
+                const nowInTemplates = mData.filter(m => isUserMatch(m.name)).map(m => m.templateId);
+
+                const lostTemplates = wasInTemplates.filter(tid => !nowInTemplates.includes(tid));
+                if (lostTemplates.length > 0) {
+                    lostTemplates.forEach(tid => {
+                        const template = tData.find(t => t.id === tid) || templates.find(t => t.id === tid);
+                        const templateName = template?.name || 'una plantilla';
+                        notificationService.notifyKickedFromTemplate(templateName);
+                    });
+                }
+            }
+
             setTemplates(tData);
             setMembers(mData);
             setServices(sData);
             setPrograms(pData);
+
+            if (currentUser) {
+                notificationService.syncAllLocalNotifications(currentUser, sData, mData, tData, users || []);
+            }
         } catch (err) {
             console.error('❌ [LuminaSync] Error general de carga de datos:', err);
         } finally {
@@ -152,8 +302,40 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         const setupRealtime = async () => {
             try {
                 channel = supabase.channel(`room-${accountId}`);
-                
+                channelRef.current = channel;
                 channel
+                    .on('broadcast', { event: 'test_notification' }, ({ payload }) => {
+                        console.log('📢 Realtime Test Notification Broadcast:', payload);
+                        notificationService.sendLocalNotification(
+                            payload.id || Date.now(),
+                            payload.title,
+                            payload.body,
+                            null,
+                            payload.extra || {}
+                        );
+                    })
+                    .on('broadcast', { event: 'real_service_change' }, ({ payload }) => {
+                        console.log('📢 Realtime Broadcast Service change:', payload);
+                        fetchData();
+                        try {
+                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                processRealtimeService(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime service broadcast:', e);
+                        }
+                    })
+                    .on('broadcast', { event: 'real_program_change' }, ({ payload }) => {
+                        console.log('📢 Realtime Broadcast Program change:', payload);
+                        fetchData();
+                        try {
+                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                processRealtimeProgram(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime program broadcast:', e);
+                        }
+                    })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
                         console.log('🔄 Realtime Member change:', payload);
                         fetchData();
@@ -161,14 +343,46 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
                         console.log('🔄 Realtime Service change:', payload);
                         fetchData();
+                        try {
+                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                processRealtimeService(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime service change:', e);
+                        }
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'templates' }, (payload) => {
                         console.log('🔄 Realtime Template change:', payload);
                         fetchData();
+                        try {
+                            if (payload && payload.eventType === 'UPDATE') {
+                                processRealtimeTemplate(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime template change:', e);
+                        }
+                    })
+                    .on('broadcast', { event: 'real_template_change' }, ({ payload }) => {
+                        console.log('📢 Realtime Broadcast Template change:', payload);
+                        fetchData();
+                        try {
+                            if (payload && payload.eventType === 'UPDATE') {
+                                processRealtimeTemplate(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime template broadcast:', e);
+                        }
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, (payload) => {
                         console.log('🔄 Realtime Program change:', payload);
                         fetchData();
+                        try {
+                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                processRealtimeProgram(payload.new);
+                            }
+                        } catch (e) {
+                            console.error('Error processing realtime program change:', e);
+                        }
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, (payload) => {
                         console.log('🔄 Realtime Transaction change:', payload);
@@ -188,6 +402,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             if (channel) {
                 channel.unsubscribe();
             }
+            channelRef.current = null;
         };
     }, [accountId]);
 
@@ -245,6 +460,13 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 .eq('id', id);
 
             if (error) throw error;
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_template_change',
+                    payload: { eventType: 'UPDATE', new: { ...dbUpdates, id, account_id: accountId } }
+                });
+            }
         } catch (err) {
             console.error('Failed to update template:', err);
             fetchData();
@@ -354,11 +576,23 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             created_at: new Date().toISOString()
         };
         
-        setServices(prev => [...prev, mapServiceToObj(newServiceRow)]);
-
+        setServices(prev => {
+            const updated = [...prev, mapServiceToObj(newServiceRow)];
+            if (currentUser) {
+                notificationService.syncAllLocalNotifications(currentUser, updated, members, templates, users || []);
+            }
+            return updated;
+        });
         try {
             const { error } = await supabase.from('services').insert([newServiceRow]);
             if (error) throw error;
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_service_change',
+                    payload: { eventType: 'INSERT', new: newServiceRow }
+                });
+            }
         } catch (err) {
             console.error('Failed to add service:', err);
             alert(`Error al guardar salida: ${err.message}. (Verifica tu esquema de base de datos)`);
@@ -367,7 +601,13 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const updateService = async (id, updatedData) => {
-        setServices(prev => prev.map(s => s.id === id ? { ...s, ...updatedData } : s));
+        setServices(prev => {
+            const updated = prev.map(s => s.id === id ? { ...s, ...updatedData } : s);
+            if (currentUser) {
+                notificationService.syncAllLocalNotifications(currentUser, updated, members, templates, users || []);
+            }
+            return updated;
+        });
         try {
             const dbUpdates = {};
             if (updatedData.templateId !== undefined) dbUpdates.template_id = updatedData.templateId;
@@ -385,6 +625,13 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 .eq('id', id);
 
             if (error) throw error;
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_service_change',
+                    payload: { eventType: 'UPDATE', new: { ...dbUpdates, id, account_id: accountId } }
+                });
+            }
         } catch (err) {
             console.error('Failed to update service:', err);
             fetchData();
@@ -392,7 +639,13 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const deleteService = async (id) => {
-        setServices(prev => prev.filter(s => s.id !== id));
+        setServices(prev => {
+            const updated = prev.filter(s => s.id !== id);
+            if (currentUser) {
+                notificationService.syncAllLocalNotifications(currentUser, updated, members, templates, users || []);
+            }
+            return updated;
+        });
         try {
             const { error } = await supabase
                 .from('services')
@@ -420,10 +673,16 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         };
         
         setPrograms(prev => [...prev, mapProgramToObj(newProgramRow)]);
-
         try {
             const { error } = await supabase.from('programs').insert([newProgramRow]);
             if (error) throw error;
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_program_change',
+                    payload: { eventType: 'INSERT', new: newProgramRow }
+                });
+            }
         } catch (err) {
             console.error('Failed to add program:', err);
             fetchData();

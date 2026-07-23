@@ -90,13 +90,33 @@ const HistoryView = () => {
                 </div>
 
                 {selectedTemplate && (
-                    <div style={{ display: 'flex', gap: '1rem' }}>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
                         <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '0.75rem 1.25rem', borderRadius: '12px', textAlign: 'center' }}>
                             <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--primary)' }}>{templateMembers.length}</div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '0.15rem' }}>
                                 {isPoetry ? 'Poemas' : 'Miembros'}
                             </div>
                         </div>
+                        {!isPoetry && (
+                            <>
+                                <div style={{ background: 'rgba(234, 179, 8, 0.05)', border: '1px solid rgba(234, 179, 8, 0.2)', padding: '0.75rem 1.25rem', borderRadius: '12px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#facc15' }}>
+                                        {templateMembers.filter(m => m.identifications?.hasKey).length}
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '0.15rem' }}>
+                                        🔑 Con Llave
+                                    </div>
+                                </div>
+                                <div style={{ background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.2)', padding: '0.75rem 1.25rem', borderRadius: '12px', textAlign: 'center' }}>
+                                    <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#fca5a5' }}>
+                                        {templateMembers.filter(m => m.identifications?.needsPrayer).length}
+                                    </div>
+                                    <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '0.15rem' }}>
+                                        🙏 Pide Oración
+                                    </div>
+                                </div>
+                            </>
+                        )}
                         <div style={{ background: 'rgba(255,255,255,0.02)', border: '1px solid var(--border)', padding: '0.75rem 1.25rem', borderRadius: '12px', textAlign: 'center' }}>
                             <div style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--secondary)' }}>{templateServices.length}</div>
                             <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', textTransform: 'uppercase', marginTop: '0.15rem' }}>
@@ -171,6 +191,20 @@ const HistoryView = () => {
                                                     <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', fontSize: '0.75rem' }}>
                                                         <span style={{ color: 'var(--primary)' }}>👨‍👩‍👧‍👦 Familia: {m.identifications.familyName}</span>
                                                         <span style={{ color: 'var(--text-muted)' }}>· {m.identifications.familyRole || 'Miembro'}</span>
+                                                    </div>
+                                                )}
+                                                {!isPoetry && (m.identifications?.hasKey || m.identifications?.needsPrayer) && (
+                                                    <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.5rem', flexWrap: 'wrap' }}>
+                                                        {m.identifications.hasKey && (
+                                                            <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '9999px', background: 'rgba(234, 179, 8, 0.15)', color: '#facc15', border: '1px solid rgba(234, 179, 8, 0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                🔑 Tiene llave
+                                                            </span>
+                                                        )}
+                                                        {m.identifications.needsPrayer && (
+                                                            <span style={{ fontSize: '0.7rem', padding: '0.15rem 0.5rem', borderRadius: '9999px', background: 'rgba(239, 68, 68, 0.15)', color: '#fca5a5', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
+                                                                🙏 Pide oración
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 )}
                                                 {isPoetry && m.identifications?.isDigitized && (

@@ -12,9 +12,8 @@ export const generateTemplatePDF = (template, members) => {
     doc.setFontSize(10);
     doc.setTextColor(100, 100, 100);
     doc.text(`Generado el: ${new Date().toLocaleDateString()}`, 14, 28);
-
     // Define table columns
-    const tableColumn = ["Nombre", "Teléfono", "Nº Miembro", ...template.customFields];
+    const tableColumn = ["Nombre", "Teléfono", "Nº Miembro", ...template.customFields.filter(f => !f.startsWith('__'))];
 
     // Map member data to rows
     const tableRows = members.map(member => {
@@ -23,11 +22,10 @@ export const generateTemplatePDF = (template, members) => {
             member.phone || '-',
             member.number || '-',
             // Map custom fields in order
-            ...template.customFields.map(field => (member.identifications || {})[field] || '-')
+            ...template.customFields.filter(f => !f.startsWith('__')).map(field => (member.identifications || {})[field] || '-')
         ];
         return row;
     });
-
     // Generate table
     autoTable(doc, {
         head: [tableColumn],

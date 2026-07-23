@@ -7,5 +7,4 @@
     <Grid>
         <WebView x:Name="MyWebView" />
     </Grid>
-
 </ContentPage>

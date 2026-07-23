@@ -11,8 +11,9 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
     const [serviceDate, setServiceDate] = useState(new Date().toISOString().split('T')[0]);
     const [serviceType, setServiceType] = useState('');
     const [selectedProgramId, setSelectedProgramId] = useState('');
-    const [selectedPoemId, setSelectedPoemId] = useState('');
+    const [selectedPoemIds, setSelectedPoemIds] = useState([]);
     const [isCampaign, setIsCampaign] = useState(false);
+    const [eventType, setEventType] = useState('regular'); // 'regular', 'rehearsal', 'outing', 'campaign'
 
     const templatePrograms = (programs || []).filter(p => p.templateId === templateId);
 
@@ -29,18 +30,36 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
         });
 
         const primaryMember = selectedMembers[0];
-        const finalServiceType = isCampaign 
-            ? (serviceType.trim() ? `Campaña - ${serviceType.trim()}` : 'Campaña') 
-            : serviceType.trim();
-
+        let finalServiceType = serviceType.trim();
+        if (eventType === 'rehearsal') {
+            finalServiceType = finalServiceType 
+                ? (finalServiceType.toLowerCase().includes('ensayo') ? finalServiceType : `Ensayo - ${finalServiceType}`) 
+                : 'Ensayo';
+        } else if (eventType === 'outing') {
+            finalServiceType = finalServiceType 
+                ? (finalServiceType.toLowerCase().includes('salida') ? finalServiceType : `Salida - ${finalServiceType}`) 
+                : 'Salida';
+        } else if (eventType === 'campaign' || isCampaign) {
+            finalServiceType = finalServiceType 
+                ? (finalServiceType.toLowerCase().includes('campaña') ? finalServiceType : `Campaña - ${finalServiceType}`) 
+                : 'Campaña';
+        }
         const selectedProgram = templatePrograms.find(p => p.id === selectedProgramId);
         let programText = selectedProgram ? `=== ${selectedProgram.title} ===\n${selectedProgram.content}` : '';
 
-        if (isPoetry && selectedPoemId) {
-            const poem = poems.find(p => p.id === selectedPoemId);
-            if (poem) {
-                programText = `📖 Poesía: ${poem.name}\n-----------------------\n${poem.identifications?.content || ''}\n\n${programText}`;
-            }
+        if (isPoetry) {
+            const selectedPoems = selectedPoemIds.map(id => {
+                const poem = poems.find(p => p.id === id);
+                return poem ? {
+                    id: poem.id,
+                    name: poem.name,
+                    content: poem.identifications?.content || ''
+                } : null;
+            }).filter(Boolean);
+            programText = JSON.stringify({
+                poems: selectedPoems,
+                notes: programText
+            });
         }
 
         onAssign(primaryMember.id, primaryMember.name, serviceDate, finalServiceType, selectedMembers, programText);
@@ -50,7 +69,7 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
         setServiceDate(new Date().toISOString().split('T')[0]);
         setServiceType('');
         setSelectedProgramId('');
-        setSelectedPoemId('');
+        setSelectedPoemIds([]);
         setIsCampaign(false);
         onClose();
     };
@@ -140,23 +159,128 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
                 {isPoetry && poems.length > 0 && (
                     <div style={{ marginBottom: '1.25rem' }}>
                         <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 500 }}>
-                            📝 Seleccionar Poesía a Recitar (Opcional)
+                            📝 Seleccionar Poesías a Recitar (Puedes elegir varias)
                         </label>
-                        <select
-                            className="glass-input"
-                            value={selectedPoemId}
-                            onChange={(e) => setSelectedPoemId(e.target.value)}
-                            style={{ width: '100%', padding: '0.75rem', borderRadius: '10px' }}
-                        >
-                            <option value="">-- Ninguna --</option>
-                            {poems.map(p => (
-                                <option key={p.id} value={p.id}>
-                                    {p.name}
-                                </option>
-                            ))}
-                        </select>
+                        <div style={{
+                            maxHeight: '150px',
+                            overflowY: 'auto',
+                            border: '1px solid var(--border)',
+                            borderRadius: '10px',
+                            padding: '0.75rem',
+                            background: 'rgba(255, 255, 255, 0.01)'
+                        }}>
+                            {poems.map(poem => {
+                                const isChecked = selectedPoemIds.includes(poem.id);
+                                return (
+                                    <label key={poem.id} style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.75rem',
+                                        padding: '0.4rem 0',
+                                        cursor: 'pointer',
+                                        borderBottom: '1px solid rgba(255,255,255,0.02)'
+                                    }}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isChecked}
+                                            onChange={() => {
+                                                if (isChecked) {
+                                                    setSelectedPoemIds(selectedPoemIds.filter(id => id !== poem.id));
+                                                } else {
+                                                    setSelectedPoemIds([...selectedPoemIds, poem.id]);
+                                                }
+                                            }}
+                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                        />
+                                        <span style={{ fontSize: '0.875rem' }}>
+                                            📖 {poem.name}
+                                        </span>
+                                    </label>
+                                );
+                            })}
+                        </div>
                     </div>
                 )}
+
+                <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>
+                        Tipo de Actividad / Evento
+                    </label>
+                    <div style={{ display: 'grid', gridTemplateColumns: isPoetry ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                        <button
+                            type="button"
+                            onClick={() => { setEventType('regular'); setIsCampaign(false); }}
+                            style={{
+                                padding: '0.6rem 0.3rem',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: eventType === 'regular' && !isCampaign ? '1px solid var(--primary)' : '1px solid var(--border)',
+                                background: eventType === 'regular' && !isCampaign ? 'var(--primary-glow)' : 'rgba(255,255,255,0.02)',
+                                color: eventType === 'regular' && !isCampaign ? 'var(--primary)' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            📅 Servicio
+                        </button>
+                        {isPoetry && (
+                            <>
+                                <button
+                                    type="button"
+                                    onClick={() => { setEventType('rehearsal'); setIsCampaign(false); }}
+                                    style={{
+                                        padding: '0.6rem 0.3rem',
+                                        borderRadius: '10px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        border: eventType === 'rehearsal' ? '1px solid #3b82f6' : '1px solid var(--border)',
+                                        background: eventType === 'rehearsal' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.02)',
+                                        color: eventType === 'rehearsal' ? '#93c5fd' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    🎼 Ensayo
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => { setEventType('outing'); setIsCampaign(false); }}
+                                    style={{
+                                        padding: '0.6rem 0.3rem',
+                                        borderRadius: '10px',
+                                        fontSize: '0.75rem',
+                                        fontWeight: 700,
+                                        border: eventType === 'outing' ? '1px solid #8b5cf6' : '1px solid var(--border)',
+                                        background: eventType === 'outing' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.02)',
+                                        color: eventType === 'outing' ? '#c4b5fd' : 'var(--text-muted)',
+                                        cursor: 'pointer',
+                                        transition: 'all 0.2s ease'
+                                    }}
+                                >
+                                    🚌 Salida
+                                </button>
+                            </>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => { setEventType('campaign'); setIsCampaign(true); }}
+                            style={{
+                                padding: '0.6rem 0.3rem',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: eventType === 'campaign' || isCampaign ? '1px solid #ef4444' : '1px solid var(--border)',
+                                background: eventType === 'campaign' || isCampaign ? 'rgba(239, 68, 68, 0.2)' : 'rgba(255,255,255,0.02)',
+                                color: eventType === 'campaign' || isCampaign ? '#fca5a5' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            🔥 Campaña
+                        </button>
+                    </div>
+                </div>
 
                 {!isSonido && (
                     <div style={{ marginBottom: '1.25rem' }}>
@@ -173,33 +297,6 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
                         />
                     </div>
                 )}
-
-                <div style={{
-                    marginBottom: '1.5rem',
-                    padding: '0.85rem',
-                    background: isCampaign ? 'rgba(239, 68, 68, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-                    borderRadius: '10px',
-                    border: isCampaign ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid var(--border)',
-                    transition: 'all 0.3s ease'
-                }}>
-                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer' }}>
-                        <input
-                            type="checkbox"
-                            checked={isCampaign}
-                            onChange={(e) => setIsCampaign(e.target.checked)}
-                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
-                        />
-                        <div>
-                            <span style={{ fontWeight: 600, fontSize: '0.875rem', display: 'flex', alignItems: 'center', gap: '0.35rem', color: isCampaign ? '#fca5a5' : 'var(--text-main)' }}>
-                                <Flame size={16} /> ¿Hay campaña este día?
-                            </span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'block', marginTop: '0.15rem' }}>
-                                Si se activa, este día se mostrará resaltado con un efecto especial de fuego/color.
-                            </span>
-                        </div>
-                    </label>
-                </div>
-
                 <div style={{ display: 'flex', justifyContent: 'end', gap: '1rem', marginTop: '2rem' }}>
                     <button
                         type="button"

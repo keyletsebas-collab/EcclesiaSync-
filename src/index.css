@@ -2,15 +2,17 @@
 
 :root {
   --font-family: 'Outfit', sans-serif;
-  --radius-sm: 10px;
+  --radius-sm: 12px;
   --radius-md: 20px;
-  --radius-lg: 30px;
-  --radius: 20px;
+  --radius-lg: 28px;
+  --radius-xl: 36px;
+  --radius-pill: 9999px;
+  --radius: 24px;
   --shadow-sm: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
   --shadow-md: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
-  --transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+  --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.35);
+  --transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 [data-theme='dark'] {
@@ -254,6 +256,23 @@ button:active,
   background: var(--sidebar-bg);
   display: flex;
   flex-direction: column;
+  transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1), padding 0.3s, border-right 0.3s;
+}
+
+@media (min-width: 769px) {
+  .sidebar.collapsed {
+    width: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    border-right: none !important;
+  }
+}
+
+@media (max-width: 768px) {
+  .desktop-sidebar-toggle-btn,
+  .desktop-sidebar-collapse-btn {
+    display: none !important;
+  }
 }
 
 .main-content {
@@ -297,8 +316,12 @@ h2 {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   margin-top: 1rem;
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  border: 1px solid var(--border);
 }
 
 th,
@@ -308,16 +331,25 @@ td {
   border-bottom: 1px solid var(--border);
 }
 
+tr:last-child td {
+  border-bottom: none;
+}
+
 th {
   color: var(--text-muted);
-  font-weight: 500;
-  font-size: 0.875rem;
+  font-weight: 600;
+  font-size: 0.85rem;
   text-transform: uppercase;
   letter-spacing: 0.05em;
+  background: var(--bg-glass);
+}
+
+tr {
+  transition: background-color 0.2s ease;
 }
 
 tr:hover td {
-  background: var(--bg-glass);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 /* Accessibility & elderly readability overrides */
@@ -328,17 +360,20 @@ body {
 
 button, input, select, textarea {
   font-size: 1rem !important;
+  border-radius: var(--radius-sm) !important;
 }
 
-.glass-input {
+.glass-input, input, select, textarea {
   padding: 0.85rem 1.25rem !important;
-  border-radius: 12px !important;
+  border-radius: 16px !important;
+  transition: all 0.25s ease !important;
 }
 
-.btn {
+.btn, button.btn {
   padding: 0.85rem 1.75rem !important;
-  border-radius: 12px !important;
+  border-radius: var(--radius-pill) !important;
   font-weight: 700 !important;
+  transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease !important;
 }
 
 h1 {

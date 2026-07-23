@@ -42,13 +42,12 @@
         <MauiFont Include="Resources\Fonts\*" />
 
         <!-- Raw Assets (also remove the "Resources\Raw" prefix) -->
-        <MauiAsset Include="Resources\Raw\**" Exclude="Resources\Raw\assets\**;Resources\Raw\index.html;Resources\Raw\icon-192.png;Resources\Raw\icon-512.png" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
+        <MauiAsset Include="Resources\Raw\**" Exclude="Resources\Raw\assets\**;Resources\Raw\index.html;Resources\Raw\icon-192.png;Resources\Raw\icon-512.png;Resources\Raw\logo.png" LogicalName="%(RecursiveDir)%(Filename)%(Extension)" />
     </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
         <PackageReference Include="Microsoft.Maui.Controls.Compatibility" Version="$(MauiVersion)" />
-        <PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="8.0.1" />
     </ItemGroup>
 
     <ItemGroup>
@@ -72,7 +71,7 @@
         <ItemGroup>
             <ReactCopiedFiles Include="$(MSBuildProjectDirectory)\Resources\Raw\assets\**\*.*" />
             <MauiAsset Include="@(ReactCopiedFiles)" LogicalName="assets\%(RecursiveDir)%(Filename)%(Extension)" />
-            <ReactCopiedRawFiles Include="$(MSBuildProjectDirectory)\Resources\Raw\index.html;$(MSBuildProjectDirectory)\Resources\Raw\icon-192.png;$(MSBuildProjectDirectory)\Resources\Raw\icon-512.png" />
+            <ReactCopiedRawFiles Include="$(MSBuildProjectDirectory)\Resources\Raw\index.html;$(MSBuildProjectDirectory)\Resources\Raw\icon-192.png;$(MSBuildProjectDirectory)\Resources\Raw\icon-512.png;$(MSBuildProjectDirectory)\Resources\Raw\logo.png" />
             <MauiAsset Include="@(ReactCopiedRawFiles)" LogicalName="%(Filename)%(Extension)" />
         </ItemGroup>
     </Target>

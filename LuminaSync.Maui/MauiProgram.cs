@@ -14,9 +14,7 @@ public static class MauiProgram
 				fonts.AddFont("OpenSans-Regular.ttf", "OpenSansRegular");
 			});
 
-#if DEBUG
-		builder.Logging.AddDebug();
-#endif
+
 
 #if ANDROID
         Microsoft.Maui.Handlers.WebViewHandler.Mapper.AppendToMapping("AllowFileAccess", (handler, view) =>

@@ -45,16 +45,24 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
     // Stats
     const totalTemplates = templates.length;
 
-    // Filter unique members by name to avoid duplicates across templates on the global dashboard
-    const uniqueMembers = [];
-    const seenNames = new Set();
+    // Filter unique members by name, merging flags (hasKey, needsPrayer) across templates
+    const uniqueMembersMap = new Map();
     members.forEach(m => {
-        const nameKey = m.name?.toLowerCase().trim() || '';
-        if (nameKey && !seenNames.has(nameKey)) {
-            seenNames.add(nameKey);
-            uniqueMembers.push(m);
+        const nameKey = m.name?.toLowerCase().trim();
+        if (!nameKey) return;
+        if (!uniqueMembersMap.has(nameKey)) {
+            uniqueMembersMap.set(nameKey, { ...m, identifications: { ...(m.identifications || {}) } });
+        } else {
+            const existing = uniqueMembersMap.get(nameKey);
+            existing.identifications = {
+                ...(existing.identifications || {}),
+                ...(m.identifications || {}),
+                hasKey: Boolean(existing.identifications?.hasKey || m.identifications?.hasKey),
+                needsPrayer: Boolean(existing.identifications?.needsPrayer || m.identifications?.needsPrayer)
+            };
         }
     });
+    const uniqueMembers = Array.from(uniqueMembersMap.values());
 
     const totalMembers = uniqueMembers.length;
     const totalServices = services.length;
@@ -162,9 +170,9 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '1.25rem' }}>
                 {[
                     { label: 'Plantillas Activas', val: totalTemplates, icon: <Scroll size={20} color="var(--primary)" />, color: 'var(--primary)' },
-                    { label: 'Miembros Registrados', val: isKeylet ? totalMembers : '🔒', icon: <Users size={20} color="#34d399" />, color: '#34d399' },
-                    { label: 'Servicios Programados', val: isKeylet ? totalServices : '🔒', icon: <Calendar size={20} color="#fbbf24" />, color: '#fbbf24' },
-                    { label: 'Peticiones de Oración', val: isKeylet ? activePrayerRequests.length : '🔒', icon: <Heart size={20} color="#f87171" />, color: '#f87171' }
+                    { label: 'Miembros Registrados', val: totalMembers, icon: <Users size={20} color="#34d399" />, color: '#34d399' },
+                    { label: 'Servicios Programados', val: totalServices, icon: <Calendar size={20} color="#fbbf24" />, color: '#fbbf24' },
+                    { label: 'Peticiones de Oración', val: activePrayerRequests.length, icon: <Heart size={20} color="#f87171" />, color: '#f87171' }
                 ].map((card, i) => (
                     <div key={i} className="glass-panel" style={{
                         padding: '1.25rem 1.5rem',
@@ -186,35 +194,43 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
 
             {/* Split view: Prayer requests vs Upcoming services */}
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(350px, 1fr))', gap: '1.5rem' }}>
-                {isKeylet ? (
-                    <>
-                        {/* Prayer requests panel */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Heart size={18} color="#f87171" /> Peticiones de Oración Activas ({activePrayerRequests.length})
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                                {activePrayerRequests.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
-                                        No hay peticiones de oración activas en este momento.
-                                    </div>
-                                ) : (
-                                    activePrayerRequests.map(req => (
-                                        <div key={req.id} style={{
-                                            background: 'rgba(239, 68, 68, 0.02)',
-                                            border: '1px solid rgba(239, 68, 68, 0.15)',
-                                            borderRadius: '12px',
-                                            padding: '0.85rem 1rem',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                        }}>
-                                            <div>
+                {/* Prayer requests panel */}
+                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Heart size={18} color="#f87171" /> Peticiones de Oración Activas ({activePrayerRequests.length})
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                        {activePrayerRequests.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                No hay peticiones de oración activas en este momento.
+                            </div>
+                        ) : (
+                            activePrayerRequests.map(req => {
+                                const templateObj = templates.find(t => t.id === (req.templateId || req.template_id));
+                                return (
+                                    <div key={req.id} style={{
+                                        background: 'rgba(239, 68, 68, 0.02)',
+                                        border: '1px solid rgba(239, 68, 68, 0.15)',
+                                        borderRadius: '12px',
+                                        padding: '0.85rem 1rem',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
                                                 <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>{req.name}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                    {req.identifications?.familyName ? `👨‍👩‍👧‍👦 Familia ${req.identifications.familyName}` : 'Miembro'}
-                                                </p>
+                                                {templateObj && (
+                                                    <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: '6px', background: 'rgba(239, 68, 68, 0.15)', color: '#ff8a8a', border: '1px solid rgba(239, 68, 68, 0.3)', fontWeight: 600 }}>
+                                                        📍 {templateObj.name}
+                                                    </span>
+                                                )}
                                             </div>
+                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                {req.identifications?.familyName ? `👨‍👩‍👧‍👦 Familia ${req.identifications.familyName}` : 'Miembro'}
+                                            </p>
+                                        </div>
+                                        {canEdit && (
                                             <button
                                                 onClick={async () => {
                                                     await updateMember(req.id, {
@@ -237,115 +253,115 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
                                             >
                                                 🙏 Orar por él/ella
                                             </button>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Key Holders panel */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                🔑 Control de Llaves ({membersWithKeys.length})
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                                {membersWithKeys.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
-                                        Ningún diácono tiene registrada la llave actualmente.
+                                        )}
                                     </div>
-                                ) : (
-                                    membersWithKeys.map(member => (
-                                        <div key={member.id} style={{
-                                            background: 'rgba(251, 191, 36, 0.02)',
-                                            border: '1px solid rgba(251, 191, 36, 0.15)',
-                                            borderRadius: '12px',
-                                            padding: '0.85rem 1rem',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                        }}>
-                                            <div>
-                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>{member.name}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
-                                                    {member.phone ? `📞 ${member.phone}` : 'Diácono'}
-                                                </p>
-                                            </div>
-                                            <span style={{
-                                                background: 'rgba(251, 191, 36, 0.15)',
-                                                color: '#fbbf24',
-                                                fontSize: '0.65rem',
-                                                padding: '0.25rem 0.5rem',
-                                                borderRadius: '6px',
-                                                fontWeight: 700,
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: '0.15rem'
-                                            }}>
-                                                🔑 Tiene la Llave
-                                            </span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-
-                        {/* Upcoming services panel */}
-                        <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                                <Calendar size={18} color="#fbbf24" /> Próximos Servicios ({upcomingServices.length})
-                            </h3>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
-                                {upcomingServices.length === 0 ? (
-                                    <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
-                                        No hay servicios programados próximamente.
-                                    </div>
-                                ) : (
-                                    upcomingServices.map(srv => (
-                                        <div key={srv.id} style={{
-                                            background: 'rgba(255, 255, 255, 0.01)',
-                                            border: '1px solid var(--border)',
-                                            borderRadius: '12px',
-                                            padding: '0.85rem 1rem',
-                                            display: 'flex',
-                                            justifyContent: 'space-between',
-                                            alignItems: 'center'
-                                        }}>
-                                            <div>
-                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>{srv.memberName || srv.member_name}</h4>
-                                                <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--secondary)' }}>
-                                                    {srv.serviceType || srv.service_type}
-                                                </p>
-                                            </div>
-                                            <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
-                                                📅 {srv.serviceDate || srv.service_date}
-                                            </span>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
-                    </>
-                ) : (
-                    <div className="glass-panel" style={{
-                        gridColumn: '1 / -1',
-                        padding: '3rem 2rem',
-                        textAlign: 'center',
-                        background: 'rgba(239, 68, 68, 0.02)',
-                        border: '1px solid rgba(239, 68, 68, 0.15)',
-                        borderRadius: '24px',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        gap: '1rem'
-                    }}>
-                        <Shield size={48} style={{ color: '#fca5a5', opacity: 0.6 }} />
-                        <h3 style={{ fontSize: '1.25rem', fontWeight: 700, color: 'var(--text-main)', margin: 0 }}>Registro y Control de la Iglesia Restringido</h3>
-                        <p style={{ color: 'var(--text-muted)', fontSize: '0.9rem', maxWidth: '500px', margin: 0, lineHeight: '1.6' }}>
-                            Solo la cuenta del administrador principal <strong>keylet</strong> tiene los permisos necesarios para visualizar las peticiones de oración activas, el control de llaves y el cronograma de servicios de la iglesia.
-                        </p>
+                                );
+                            })
+                        )}
                     </div>
-                )}
+                </div>
+
+                {/* Key Holders panel */}
+                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        🔑 Control de Llaves ({membersWithKeys.length})
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                        {membersWithKeys.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                Ningún diácono tiene registrada la llave actualmente.
+                            </div>
+                        ) : (
+                            membersWithKeys.map(member => {
+                                const templateObj = templates.find(t => t.id === (member.templateId || member.template_id));
+                                return (
+                                    <div key={member.id} style={{
+                                        background: 'rgba(251, 191, 36, 0.02)',
+                                        border: '1px solid rgba(251, 191, 36, 0.15)',
+                                        borderRadius: '12px',
+                                        padding: '0.85rem 1rem',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>{member.name}</h4>
+                                                {templateObj && (
+                                                    <span style={{ fontSize: '0.65rem', padding: '0.1rem 0.4rem', borderRadius: '6px', background: 'rgba(251, 191, 36, 0.15)', color: '#fbbf24', border: '1px solid rgba(251, 191, 36, 0.3)', fontWeight: 600 }}>
+                                                        📍 {templateObj.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                                                {member.phone ? `📞 ${member.phone}` : 'Diácono'}
+                                            </p>
+                                        </div>
+                                        <span style={{
+                                            background: 'rgba(251, 191, 36, 0.15)',
+                                            color: '#fbbf24',
+                                            fontSize: '0.65rem',
+                                            padding: '0.25rem 0.5rem',
+                                            borderRadius: '6px',
+                                            fontWeight: 700,
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: '0.15rem'
+                                        }}>
+                                            🔑 Tiene la Llave
+                                        </span>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
+
+                {/* Upcoming services panel */}
+                <div className="glass-panel" style={{ padding: '1.5rem', display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Calendar size={18} color="#fbbf24" /> Próximos Servicios ({upcomingServices.length})
+                    </h3>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxHeight: '350px', overflowY: 'auto', paddingRight: '0.25rem' }}>
+                        {upcomingServices.length === 0 ? (
+                            <div style={{ textAlign: 'center', padding: '3rem 1rem', color: 'var(--text-muted)', fontSize: '0.9rem', fontStyle: 'italic' }}>
+                                No hay servicios programados próximamente.
+                            </div>
+                        ) : (
+                            upcomingServices.map(srv => {
+                                const templateObj = templates.find(t => t.id === (srv.templateId || srv.template_id));
+                                return (
+                                    <div key={srv.id} style={{
+                                        background: 'rgba(255, 255, 255, 0.01)',
+                                        border: '1px solid var(--border)',
+                                        borderRadius: '12px',
+                                        padding: '0.85rem 1rem',
+                                        display: 'flex',
+                                        justifyContent: 'space-between',
+                                        alignItems: 'center'
+                                    }}>
+                                        <div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                                                <h4 style={{ margin: 0, fontSize: '0.9rem', fontWeight: 600, color: 'var(--text-main)' }}>{srv.memberName || srv.member_name}</h4>
+                                                {templateObj && (
+                                                    <span style={{ fontSize: '0.7rem', padding: '0.1rem 0.5rem', borderRadius: '9999px', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid rgba(99, 102, 241, 0.3)', fontWeight: 600 }}>
+                                                        📍 {templateObj.name}
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: 'var(--secondary)' }}>
+                                                {srv.serviceType || srv.service_type}
+                                            </p>
+                                        </div>
+                                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', fontWeight: 600 }}>
+                                            📅 {srv.serviceDate || srv.service_date}
+                                        </span>
+                                    </div>
+                                );
+                            })
+                        )}
+                    </div>
+                </div>
             </div>
 
             {/* Quick Actions Panel */}
@@ -358,7 +374,7 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
                             <ChevronRight size={14} />
                         </button>
                     )}
-                    {totalTemplates > 0 && isKeylet && (
+                    {totalTemplates > 0 && (
                         <button className="btn" style={{ padding: '1rem', background: 'rgba(255, 255, 255, 0.01)', border: '1px solid var(--border)', color: 'var(--text-main)', justifyContent: 'space-between' }} onClick={onSelectHistory}>
                             <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 600 }}><Scroll size={16} /> Ver Historia</span>
                             <ChevronRight size={14} />

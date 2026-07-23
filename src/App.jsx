@@ -4,7 +4,7 @@ import Auth from './components/Auth';
 import { useStorage } from './context/StorageContext';
 import { useAuth } from './context/AuthContext';
 import { useLanguage } from './context/LanguageContext';
-import { Plus, Sparkles, Menu } from 'lucide-react';
+import { Plus, Sparkles, Menu, ChevronRight } from 'lucide-react';
 import Modal from './components/Modal';
 import LandingPage from './components/LandingPage';
 import TemplateView from './components/TemplateView';
@@ -23,13 +23,15 @@ function App() {
   const [isNewTemplateModalOpen, setIsNewTemplateModalOpen] = useState(false);
   const [showLanding, setShowLanding] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
 
-  // Schedule birthday notifications when authenticated
+
+
+  // Reset active view and template when current user changes (e.g. login/logout)
   useEffect(() => {
-    if (isAuthenticated && ((users && users.length > 0) || (members && members.length > 0))) {
-      notificationService.scheduleBirthdayNotifications(users || [], members || []);
-    }
-  }, [isAuthenticated, users, members]);
+    setActiveTemplateId(null);
+    setActiveView('history');
+  }, [currentUser?.uid]);
 
   // New Template Form State
   const [newTemplateName, setNewTemplateName] = useState('');
@@ -114,24 +116,7 @@ function App() {
 
     const pwdField = template.customFields?.find(f => f.startsWith('__password:'));
     if (!pwdField) {
-      // Auto join template if no password is set
-      try {
-        const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
-        const nextNumber = maxNumber + 1;
-        await addMember(templateId, {
-          name: currentUserFullName,
-          number: nextNumber,
-          phone: activeMembership?.phone || '',
-          identifications: {
-            familyRole: '',
-            familyName: '',
-            hasKey: false,
-            needsPrayer: false
-          }
-        });
-      } catch (err) {
-        console.error('Failed to auto join template:', err);
-      }
+      // Just select and open the template view
       setActiveTemplateId(templateId);
       setActiveView('templates');
       setIsMobileSidebarOpen(false);
@@ -158,16 +143,23 @@ function App() {
       try {
         const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
         const nextNumber = maxNumber + 1;
+        const isPoetry = template?.customFields?.includes('__poetry__');
+        const isSonido = template?.customFields?.includes('__sonido__');
+        const identifications = isPoetry
+          ? { isParticipant: true }
+          : isSonido
+            ? { hasKey: false }
+            : {
+                familyRole: '',
+                familyName: '',
+                hasKey: false,
+                needsPrayer: false
+              };
         await addMember(pendingTemplateId, {
           name: currentUserFullName,
           number: nextNumber,
           phone: activePhone,
-          identifications: {
-            familyRole: '',
-            familyName: '',
-            hasKey: false,
-            needsPrayer: false
-          }
+          identifications
         });
       } catch (err) {
         console.error('Error joining template:', err);
@@ -236,10 +228,48 @@ function App() {
         }}
         isOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
       />
 
+      {isSidebarCollapsed && (
+        <button 
+          onClick={() => setIsSidebarCollapsed(false)}
+          className="desktop-sidebar-toggle-btn"
+          style={{
+            position: 'fixed',
+            left: '1.5rem',
+            top: '1.5rem',
+            zIndex: 999,
+            background: 'var(--bg-glass)',
+            border: '1px solid var(--border)',
+            color: 'var(--text-main)',
+            borderRadius: '12px',
+            width: '40px',
+            height: '40px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            backdropFilter: 'blur(10px)',
+            transition: 'background 0.2s, transform 0.2s'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.background = 'rgba(255,255,255,0.1)';
+            e.currentTarget.style.transform = 'scale(1.05)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.background = 'var(--bg-glass)';
+            e.currentTarget.style.transform = 'scale(1)';
+          }}
+          title="Mostrar barra lateral"
+        >
+          <ChevronRight size={20} />
+        </button>
+      )}
+
       <main className="main-content">
-        {activeView === 'admins' ? (
+        {activeView === 'admins' && currentUser?.username?.toLowerCase() === 'keylet' ? (
           <AdminsView />
         ) : activeView === 'history' ? (
           <DashboardView

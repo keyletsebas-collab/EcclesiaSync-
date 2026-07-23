@@ -2,19 +2,24 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { useTheme } from '../context/ThemeContext';
+import { useStorage } from '../context/StorageContext';
 import Modal from './Modal';
 import {
     Globe, User, Shield, LogOut, Info, Download, Moon, Sun,
-    Eye, EyeOff, Lock, Unlock, Trash2, Users, RefreshCw
+    Eye, EyeOff, Lock, Unlock, Trash2, Users, RefreshCw,
+    Bell, Send, CheckCircle, AlertTriangle
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import notificationService from '../utils/NotificationService';
 
 const Settings = ({ isOpen, onClose }) => {
     const { 
         currentUser, logout, users, fetchUsers, 
         toggleBlockUser, deleteUser, joinAccount, updateMembershipRole,
-        updateProfile, leaveAccount, createChurch
+        updateProfile, leaveAccount, createChurch, activeAccountId
     } = useAuth();
+
+    const { templates, members, services } = useStorage();
     const { currentLanguage, setLanguage, t } = useLanguage();
     const { theme, setTheme } = useTheme();
     const [joinId, setJoinId] = useState('');
@@ -23,6 +28,59 @@ const Settings = ({ isOpen, onClose }) => {
     const [visiblePasswords, setVisiblePasswords] = useState({});
     const [loadingAction, setLoadingAction] = useState(null);
     const [churchNames, setChurchNames] = useState({});
+
+    // Notification Control State
+    const [notifPermission, setNotifPermission] = useState('checking');
+    const [syncMessage, setSyncMessage] = useState('');
+    const [testLoading, setTestLoading] = useState(false);
+
+    const updatePermissionStatus = async () => {
+        const status = await notificationService.checkPermissionStatus();
+        setNotifPermission(status);
+    };
+
+    useEffect(() => {
+        if (isOpen) {
+            updatePermissionStatus();
+        }
+    }, [isOpen]);
+
+    const handleRequestPermission = async () => {
+        const granted = await notificationService.requestPermissions();
+        await updatePermissionStatus();
+        if (granted) {
+            setSyncMessage('✅ Permisos concedidos correctamente');
+        } else {
+            setSyncMessage('⚠️ Permisos denegados por el sistema');
+        }
+        setTimeout(() => setSyncMessage(''), 4000);
+    };
+
+    const handleTestNotification = async () => {
+        setTestLoading(true);
+        setSyncMessage('');
+        await notificationService.sendLocalNotification(
+            Date.now(),
+            '🔔 Prueba de Notificación',
+            '¡Las notificaciones de VerbumSync están funcionando perfectamente en tu dispositivo!'
+        );
+        setTestLoading(false);
+        setSyncMessage('📱 Notificación de prueba emitida');
+        setTimeout(() => setSyncMessage(''), 4000);
+    };
+
+    const handleSyncAlarms = async () => {
+        setSyncMessage('⏳ Sincronizando notificaciones...');
+        const result = await notificationService.syncAllLocalNotifications(currentUser, services, members, templates, users || []);
+        if (result.status === 'success') {
+            setSyncMessage(`🚀 ${result.scheduledCount} notificaciones programadas en Android.`);
+        } else if (result.status === 'skipped_web') {
+            setSyncMessage('ℹ️ Modo Web: Las notificaciones responden a eventos en tiempo real.');
+        } else {
+            setSyncMessage(`⚠️ Estado: ${result.status}`);
+        }
+        setTimeout(() => setSyncMessage(''), 5000);
+    };
 
     const fetchChurchNames = async () => {
         try {
@@ -75,6 +133,27 @@ const Settings = ({ isOpen, onClose }) => {
             setTimeout(() => setSaveSuccess(false), 3000);
         } else {
             alert('Error al guardar el perfil: ' + res.error);
+        }
+    };
+
+    const triggerTestNotification = async (id, title, body, extra) => {
+        await notificationService.sendLocalNotification(id, title, body, null, extra);
+        try {
+            // Find active membership to determine accountId
+            const activeMembership = currentUser?.memberships?.find(m => m.id === activeAccountId) || currentUser?.memberships?.[0];
+            const accId = activeMembership?.id || currentUser?.accountId || activeAccountId;
+            if (accId) {
+                const channelId = `room-${accId}`;
+                const channel = supabase.channel(channelId);
+                await channel.send({
+                    type: 'broadcast',
+                    event: 'test_notification',
+                    payload: { id, title, body, extra }
+                });
+                console.log(`📡 Broadcasted test notification to channel ${channelId}`);
+            }
+        } catch (e) {
+            console.error('Failed to broadcast test notification:', e);
         }
     };
 
@@ -171,6 +250,78 @@ const Settings = ({ isOpen, onClose }) => {
                 </div>
             </div>
 
+            {/* Notifications & System Alarms Card */}
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600 }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <Bell size={16} /> Notificaciones y Alertas
+                    </span>
+                    <span style={{
+                        fontSize: '0.7rem',
+                        padding: '0.2rem 0.6rem',
+                        borderRadius: '1rem',
+                        background: notifPermission === 'granted' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                        color: notifPermission === 'granted' ? '#22c55e' : '#ef4444',
+                        fontWeight: 600,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '0.3rem'
+                    }}>
+                        {notifPermission === 'granted' ? <><CheckCircle size={12} /> Activas</> : <><AlertTriangle size={12} /> Desactivadas</>}
+                    </span>
+                </h4>
+
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.4' }}>
+                    Gestión y diagnóstico de notificaciones para servicios, cumpleaños, ensayos, salidas y campañas.
+                </p>
+
+                {syncMessage && (
+                    <div style={{
+                        padding: '0.6rem 0.8rem',
+                        borderRadius: '8px',
+                        background: 'rgba(99, 102, 241, 0.1)',
+                        border: '1px solid rgba(99, 102, 241, 0.3)',
+                        fontSize: '0.75rem',
+                        marginBottom: '1rem',
+                        color: 'var(--text-main)',
+                        fontWeight: 500
+                    }}>
+                        {syncMessage}
+                    </div>
+                )}
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
+                    {notifPermission !== 'granted' ? (
+                        <button
+                            onClick={handleRequestPermission}
+                            className="btn btn-primary"
+                            style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center' }}
+                        >
+                            <Bell size={14} /> Activar Notificaciones
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleTestNotification}
+                            disabled={testLoading}
+                            className="btn"
+                            style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid var(--border)' }}
+                        >
+                            <Send size={14} /> Probar Notificación
+                        </button>
+                    )}
+
+                    <button
+                        onClick={handleSyncAlarms}
+                        className="btn"
+                        style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
+                    >
+                        <RefreshCw size={14} /> Resincronizar Alertas
+                    </button>
+                </div>
+            </div>
+
+
+
             {/* Account Info */}
             <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
                 <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600 }}>
@@ -228,109 +379,72 @@ const Settings = ({ isOpen, onClose }) => {
                     </div>
                 </div>
 
-                {/* Join New Account */}
-                <form onSubmit={handleJoin} style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                    <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>{t('joinNewAccount')}</label>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <input 
-                            type="text" 
-                            className="glass-input" 
-                            placeholder="CODE-123" 
-                            value={joinId}
-                            onChange={(e) => setJoinId(e.target.value)}
-                            style={{ flex: 1, fontSize: '0.875rem' }}
-                        />
-                        <button type="submit" disabled={joinLoading} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
-                            {joinLoading ? '...' : '+'}
-                        </button>
-                    </div>
-                    {joinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>{joinError}</p>}
-                </form>
+                {/* Join & Create Church options (Only visible if user leaves or doesn't belong to any church) */}
+                {(!currentUser?.memberships || currentUser.memberships.length === 0) && (
+                    <>
+                        {/* Join New Account */}
+                        <form onSubmit={handleJoin} style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem' }}>{t('joinNewAccount')}</label>
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                <input 
+                                    type="text" 
+                                    className="glass-input" 
+                                    placeholder="CODE-123" 
+                                    value={joinId}
+                                    onChange={(e) => setJoinId(e.target.value)}
+                                    style={{ flex: 1, fontSize: '0.875rem' }}
+                                />
+                                <button type="submit" disabled={joinLoading} className="btn btn-primary" style={{ padding: '0.5rem 1rem' }}>
+                                    {joinLoading ? '...' : '+'}
+                                </button>
+                            </div>
+                            {joinError && <p style={{ color: '#ef4444', fontSize: '0.7rem', marginTop: '0.4rem' }}>{joinError}</p>}
+                        </form>
 
-                {/* Create New Church Option */}
-                {(() => {
-                    const hasJoinedOtherChurch = currentUser?.memberships?.some(m => m.role === 'editor' || m.role === 'viewer');
-                    return (
+                        {/* Create New Church Option */}
                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
                             <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>⛪ Crear Nueva Iglesia</label>
-                            {hasJoinedOtherChurch ? (
-                                <p style={{ fontSize: '0.7rem', color: '#fca5a5', margin: 0, fontStyle: 'italic' }}>
-                                    ⚠️ Ya te has unido a otra iglesia como editor/lector. Debes salirte de ella para poder crear una nueva iglesia.
+                            <div>
+                                <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
+                                    Registra una nueva congregación y obtén su código de iglesia único.
                                 </p>
-                            ) : (
-                                <div>
-                                    <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                                        Registra una nueva congregación y obtén su código de iglesia único.
-                                    </p>
-                                    <form onSubmit={async (e) => {
-                                        e.preventDefault();
-                                        const name = e.target.churchName.value.trim();
-                                        if (!name) return;
-                                        
-                                        setLoadingAction('create_church');
-                                        const res = await createChurch(name);
-                                        setLoadingAction(null);
-                                        if (res.success) {
-                                            e.target.reset();
-                                            fetchChurchNames();
-                                            alert('¡Iglesia creada con éxito!');
-                                        } else {
-                                            alert('Error al crear iglesia: ' + res.error);
-                                        }
-                                    }}>
-                                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                                            <input
-                                                type="text"
-                                                name="churchName"
-                                                className="glass-input"
-                                                placeholder="Nombre de la Iglesia"
-                                                required
-                                                style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem' }}
-                                            />
-                                            <button type="submit" disabled={loadingAction === 'create_church'} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>
-                                                {loadingAction === 'create_church' ? '...' : 'Crear'}
-                                            </button>
-                                        </div>
-                                    </form>
-                                </div>
-                            )}
+                                <form onSubmit={async (e) => {
+                                    e.preventDefault();
+                                    const name = e.target.churchName.value.trim();
+                                    if (!name) return;
+                                    
+                                    setLoadingAction('create_church');
+                                    const res = await createChurch(name);
+                                    setLoadingAction(null);
+                                    if (res.success) {
+                                        e.target.reset();
+                                        fetchChurchNames();
+                                        alert('¡Iglesia creada con éxito!');
+                                    } else {
+                                        alert('Error al crear iglesia: ' + res.error);
+                                    }
+                                }}>
+                                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                        <input
+                                            type="text"
+                                            name="churchName"
+                                            className="glass-input"
+                                            placeholder="Nombre de la Iglesia"
+                                            required
+                                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem' }}
+                                        />
+                                        <button type="submit" disabled={loadingAction === 'create_church'} className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.4rem 0.8rem' }}>
+                                            {loadingAction === 'create_church' ? '...' : 'Crear'}
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
                         </div>
-                    );
-                })()}
+                    </>
+                )}
             </div>
 
-            {/* Perfil del Usuario: Cumpleaños y Dirección */}
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
-                    <User size={16} /> Perfil del Usuario
-                </h4>
-                <form onSubmit={handleSaveProfile} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Fecha de Cumpleaños</label>
-                        <input 
-                            type="date" 
-                            className="glass-input" 
-                            value={birthday}
-                            onChange={(e) => setBirthday(e.target.value)}
-                            style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem' }}
-                        />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.3rem' }}>Dirección de Casa</label>
-                        <textarea 
-                            className="glass-input" 
-                            placeholder="Calle, Ciudad, etc."
-                            rows={2}
-                            value={address}
-                            onChange={(e) => setAddress(e.target.value)}
-                            style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem', resize: 'vertical' }}
-                        />
-                    </div>
-                    <button type="submit" disabled={saveLoading} className="btn btn-primary" style={{ fontSize: '0.875rem', padding: '0.5rem', justifyContent: 'center' }}>
-                        {saveLoading ? 'Guardando...' : saveSuccess ? '¡Perfil Guardado!' : 'Guardar Perfil'}
-                    </button>
-                </form>
-            </div>
+
 
             {/* ─── TEAM: Organization Management ────────────────────────────── */}
             {(currentUser?.isMaster || currentUser?.memberships?.find(m => m.id === currentUser.accountId && m.role === 'master')) && (
@@ -389,6 +503,8 @@ const Settings = ({ isOpen, onClose }) => {
                     )}
                 </div>
             )}
+
+
 
 
 

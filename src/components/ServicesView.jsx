@@ -4,8 +4,120 @@ import { useAuth } from '../context/AuthContext';
 import { useLanguage } from '../context/LanguageContext';
 import { Calendar, Trash2, UserPlus, Flame, Upload, FileImage, Film, Eye } from 'lucide-react';
 import AssignServiceModal from './AssignServiceModal';
+import Modal from './Modal';
 
 import notificationService from '../utils/NotificationService';
+
+const parsePoetryProgram = (programStr, members = []) => {
+    if (!programStr) {
+        return { poems: [], notes: '' };
+    }
+    
+    // 1. Try parsing as JSON (new format)
+    try {
+        const parsed = JSON.parse(programStr);
+        if (parsed && typeof parsed === 'object' && ('poems' in parsed || 'notes' in parsed)) {
+            return {
+                poems: parsed.poems || [],
+                notes: parsed.notes || ''
+            };
+        }
+    } catch (e) {
+        // Fallback to legacy parsing if JSON parsing fails
+    }
+
+    // 2. Legacy parsing: look for "📖 Poesía:" pattern
+    const poetryHeaderMarker = '📖 Poesía:';
+    if (programStr.includes(poetryHeaderMarker)) {
+        const startIdx = programStr.indexOf(poetryHeaderMarker);
+        const titleLineEnd = programStr.indexOf('\n', startIdx);
+        if (titleLineEnd !== -1) {
+            const poemName = programStr.substring(startIdx + poetryHeaderMarker.length, titleLineEnd).trim();
+            
+            // Find poem by name in template's poems list
+            const templatePoems = members.filter(m => m.identifications && !m.identifications.isParticipant);
+            const foundPoem = templatePoems.find(p => p.name.toLowerCase() === poemName.toLowerCase());
+            
+            if (foundPoem) {
+                const poemContent = foundPoem.identifications?.content || '';
+                
+                // Extract notes by removing the header
+                let remainingText = programStr.substring(titleLineEnd + 1);
+                const dashesMarker = '-----------------------';
+                const dashesIdx = remainingText.indexOf(dashesMarker);
+                if (dashesIdx !== -1 && dashesIdx < 40) {
+                    const dashesLineEnd = remainingText.indexOf('\n', dashesIdx);
+                    if (dashesLineEnd !== -1) {
+                        remainingText = remainingText.substring(dashesLineEnd + 1);
+                    }
+                }
+                
+                const normalizeLines = (str) => {
+                    return str.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').map(l => l.trim());
+                };
+                
+                const poemLines = normalizeLines(poemContent).filter(Boolean);
+                const programLines = normalizeLines(remainingText);
+                
+                const originalLines = remainingText.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+                
+                let originalLineIdx = 0;
+                let poemLineIdx = 0;
+                
+                while (poemLineIdx < poemLines.length && originalLineIdx < originalLines.length) {
+                    const origClean = originalLines[originalLineIdx].trim();
+                    if (!origClean) {
+                        originalLineIdx++;
+                        continue;
+                    }
+                    
+                    const poemClean = poemLines[poemLineIdx];
+                    const cleanStr = (s) => s.toLowerCase().replace(/[^a-z0-9áéíóúñü]/g, '');
+                    
+                    if (cleanStr(origClean) === cleanStr(poemClean)) {
+                        poemLineIdx++;
+                    }
+                    originalLineIdx++;
+                }
+                
+                const notesText = originalLines.slice(originalLineIdx).join('\n').trim();
+                
+                return {
+                    poems: [{
+                        id: foundPoem.id,
+                        name: foundPoem.name,
+                        content: poemContent
+                    }],
+                    notes: notesText
+                };
+            } else {
+                // Fallback if the poem is not found in the members database
+                let contentStart = titleLineEnd + 1;
+                const dashesMarker = '-----------------------';
+                const dashesIdx = programStr.indexOf(dashesMarker, titleLineEnd);
+                if (dashesIdx !== -1 && dashesIdx < titleLineEnd + 40) {
+                    contentStart = programStr.indexOf('\n', dashesIdx) + 1;
+                }
+                
+                const poemContent = programStr.substring(contentStart).trim();
+                return {
+                    poems: [{
+                        id: 'legacy',
+                        name: poemName,
+                        content: poemContent
+                    }],
+                    notes: ''
+                };
+            }
+        }
+    }
+
+    // 3. Simple plain text program notes (no poems)
+    return {
+        poems: [],
+        notes: programStr || ''
+    };
+};
 
 const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => {
     const { services, addService, deleteService, updateService, updateTemplate } = useStorage();
@@ -13,6 +125,7 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
     const hasEditPermission = canEdit || isSonido;
     const { t } = useLanguage();
     const [isAssignModalOpen, setIsAssignModalOpen] = useState(false);
+    const [selectedServiceDetails, setSelectedServiceDetails] = useState(null);
     const [fullScreenMedia, setFullScreenMedia] = useState(null);
     const [uploadingServiceId, setUploadingServiceId] = useState(null);
 
@@ -22,31 +135,6 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
 
     const handleAssign = async (memberId, memberName, serviceDate, serviceType, assignedMembers, program) => {
         await addService(templateId, memberId, memberName, serviceDate, serviceType, program, assignedMembers);
-
-        const lowerType = (serviceType || '').toLowerCase();
-        const lowerProgram = (program || '').toLowerCase();
-        const isCampaign = lowerType.includes('campaña') || lowerType.includes('campana') || lowerProgram.includes('campaña') || lowerProgram.includes('campana');
-        const isOuting = lowerType.includes('salida') || lowerProgram.includes('salida');
-        const isRehearsal = lowerType.includes('ensayo') || lowerProgram.includes('ensayo');
-
-        const isUserAssigned = assignedMembers?.some(m => m.name?.toLowerCase() === currentUser?.username?.toLowerCase()) || memberName?.toLowerCase() === currentUser?.username?.toLowerCase();
-
-        if (isOuting || isRehearsal) {
-            await notificationService.notifyRehearsalOrOutingCreated(
-                `${isOuting ? 'Salida' : 'Ensayo'} - ${template?.name || ''}`,
-                `Fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`,
-                isOuting
-            );
-        } else {
-            await notificationService.notifyCampaignOrAssignment({
-                serviceDate,
-                assignedMembers: assignedMembers || [],
-                serviceType,
-                program,
-                isUserAssigned,
-                isCampaign
-            });
-        }
     };
 
     const getMembersDisplay = (service) => {
@@ -62,16 +150,34 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
             if (parsed && typeof parsed === 'object') {
                 return {
                     type: parsed.type || '',
-                    media: parsed.media || []
+                    media: parsed.media || [],
+                    isFinished: !!parsed.isFinished
                 };
             }
         } catch (e) {}
         return {
             type: rawType || '',
-            media: []
+            media: [],
+            isFinished: false
         };
     };
 
+    const handleToggleFinishProgram = async (service) => {
+        const { type, media, isFinished } = parseServiceType(service.serviceType);
+        const newFinishedState = !isFinished;
+        const updatedServiceTypeObj = JSON.stringify({
+            type,
+            media,
+            isFinished: newFinishedState
+        });
+        await updateService(service.id, { serviceType: updatedServiceTypeObj });
+        if (selectedServiceDetails && selectedServiceDetails.id === service.id) {
+            setSelectedServiceDetails(prev => ({
+                ...prev,
+                serviceType: updatedServiceTypeObj
+            }));
+        }
+    };
     const handleAddMedia = async (service, files) => {
         if (!files || files.length === 0) return;
         setUploadingServiceId(service.id);
@@ -265,7 +371,7 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
             </header>
 
             {/* Rehearsal Schedule Banner for Poetry */}
-            {isPoetry && rehearsalSchedules.length > 0 && (
+            {rehearsalSchedules.length > 0 && (
                 <div style={{
                     marginBottom: '2rem',
                     background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(139, 92, 246, 0.1) 100%)',
@@ -386,6 +492,7 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                         return (
                                             <div
                                                 key={service.id}
+                                                onClick={() => setSelectedServiceDetails(service)}
                                                 style={{
                                                     background: isServiceCampaign 
                                                         ? 'linear-gradient(135deg, rgba(239, 68, 68, 0.15) 0%, rgba(220, 38, 38, 0.05) 100%)' 
@@ -400,6 +507,7 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                     gap: '1rem',
                                                     position: 'relative',
                                                     boxShadow: isServiceCampaign ? '0 8px 24px rgba(239, 68, 68, 0.15)' : 'none',
+                                                    cursor: 'pointer'
                                                 }}
                                             >
                                                 {/* Header of the Day inside Card */}
@@ -419,6 +527,19 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                     </span>
 
                                                     <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                        {parseServiceType(service.serviceType).isFinished && (
+                                                            <span style={{
+                                                                background: 'rgba(239, 68, 68, 0.2)',
+                                                                border: '1px solid rgba(239, 68, 68, 0.4)',
+                                                                color: '#fca5a5',
+                                                                fontSize: '0.6rem',
+                                                                fontWeight: 800,
+                                                                padding: '0.15rem 0.5rem',
+                                                                borderRadius: '6px',
+                                                            }}>
+                                                                🏁 FINALIZADO
+                                                            </span>
+                                                        )}
                                                         {isServiceCampaign && (
                                                             <span style={{
                                                                 background: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
@@ -444,7 +565,8 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                                     alignItems: 'center',
                                                                     justifyContent: 'center'
                                                                 }}
-                                                                onClick={() => {
+                                                                onClick={(e) => {
+                                                                    e.stopPropagation();
                                                                     if (window.confirm('¿Seguro que deseas eliminar esta asignación?')) {
                                                                         deleteService(service.id);
                                                                     }
@@ -471,6 +593,17 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                             📍 Lugar/Función: {type}
                                                         </div>
                                                     )}
+                                                    {isPoetry && (() => {
+                                                        const prog = parsePoetryProgram(service.program, members);
+                                                        if (prog.poems.length > 0) {
+                                                            return (
+                                                                <div style={{ fontSize: '0.8rem', color: 'var(--primary)', fontWeight: 600, display: 'flex', flexWrap: 'wrap', gap: '0.25rem', marginTop: '0.25rem' }}>
+                                                                    📖 Poesías: {prog.poems.map(p => p.name).join(', ')}
+                                                                </div>
+                                                            );
+                                                        }
+                                                        return null;
+                                                    })()}
                                                 </div>
 
                                                 {/* Program details */}
@@ -487,11 +620,22 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                             className="glass-input"
                                                             placeholder="Escribe el programa o detalles de la actividad aquí..."
                                                             rows={3}
-                                                            defaultValue={service.program || ''}
+                                                            onClick={(e) => e.stopPropagation()}
+                                                            defaultValue={isPoetry ? parsePoetryProgram(service.program, members).notes : service.program || ''}
                                                             onBlur={async (e) => {
                                                                 const text = e.target.value;
-                                                                if (text !== (service.program || '')) {
-                                                                    await updateService(service.id, { program: text });
+                                                                const currentText = isPoetry ? parsePoetryProgram(service.program, members).notes : service.program || '';
+                                                                if (text !== currentText) {
+                                                                    if (isPoetry) {
+                                                                        const current = parsePoetryProgram(service.program, members);
+                                                                        const updatedProgram = JSON.stringify({
+                                                                            poems: current.poems,
+                                                                            notes: text
+                                                                        });
+                                                                        await updateService(service.id, { program: updatedProgram });
+                                                                    } else {
+                                                                        await updateService(service.id, { program: text });
+                                                                    }
                                                                 }
                                                             }}
                                                             style={{ width: '100%', fontSize: '0.8rem', padding: '0.5rem', borderRadius: '8px', background: 'rgba(255,255,255,0.01)' }}
@@ -509,12 +653,11 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                             maxHeight: '120px',
                                                             overflowY: 'auto'
                                                         }}>
-                                                            {service.program || 'Sin detalles del programa.'}
+                                                            {isPoetry ? (parsePoetryProgram(service.program, members).notes || 'Sin detalles del programa.') : (service.program || 'Sin detalles del programa.')}
                                                         </pre>
                                                     )}
                                                 </div>
 
-                                                {/* Multimedia section for Poetry */}
                                                 {isPoetry && (
                                                     <div style={{
                                                         display: 'flex',
@@ -535,7 +678,7 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                                         border: '1px solid var(--border)',
                                                                         cursor: 'pointer',
                                                                         background: '#000'
-                                                                    }} onClick={() => setFullScreenMedia(item)}>
+                                                                    }} onClick={(e) => { e.stopPropagation(); setFullScreenMedia(item); }}>
                                                                         {item.type === 'video' ? (
                                                                             <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', position: 'relative' }}>
                                                                                 <video src={item.data} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -580,7 +723,9 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                                                         )}
 
                                                         {hasEditPermission && (
-                                                            <label style={{
+                                                            <label 
+                                                                onClick={(e) => e.stopPropagation()}
+                                                                style={{
                                                                 display: 'inline-flex',
                                                                 alignItems: 'center',
                                                                 justifyContent: 'center',
@@ -648,7 +793,266 @@ const ServicesView = ({ template, templateId, members, isPoetry, isSonido }) => 
                     </p>
                 </div>
             )}
+            {selectedServiceDetails && (
+                <div style={{
+                    position: 'fixed',
+                    top: 0,
+                    left: 0,
+                    width: '100vw',
+                    height: '100vh',
+                    background: 'var(--bg-dark)',
+                    backgroundImage: 'var(--bg-gradient)',
+                    zIndex: 99999,
+                    display: 'flex',
+                    flexDirection: 'column',
+                    color: 'var(--text-main)',
+                    boxSizing: 'border-box'
+                }}>
+                    {/* Header bar */}
+                    <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '1.25rem 2rem',
+                        borderBottom: '1px solid var(--border)',
+                        background: 'rgba(15, 23, 42, 0.6)',
+                        backdropFilter: 'blur(20px)',
+                    }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                                <button 
+                                    onClick={() => setSelectedServiceDetails(null)}
+                                    style={{
+                                        background: 'rgba(255,255,255,0.08)',
+                                        border: '1px solid rgba(255,255,255,0.1)',
+                                        color: 'var(--text-main)',
+                                        borderRadius: '12px',
+                                        padding: '0.5rem 1rem',
+                                        cursor: 'pointer',
+                                        fontSize: '0.85rem',
+                                        fontWeight: 600,
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        gap: '0.5rem',
+                                        transition: 'background 0.2s'
+                                    }}
+                                    onMouseOver={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.15)'}
+                                    onMouseOut={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
+                                >
+                                    ← Volver
+                                </button>
+                                <h2 style={{ margin: 0, fontSize: '1.5rem', fontWeight: 800, color: 'var(--text-main)' }}>
+                                    {isPoetry ? 'Detalles de la Salida de Poesía' : 'Detalles de la Salida / Asignación'}
+                                </h2>
+                            </div>
+                            <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: '1.5rem', marginTop: '0.5rem', color: 'var(--text-muted)', fontSize: '0.9rem' }}>
+                                <span>📅 <strong style={{ color: 'var(--primary)' }}>{selectedServiceDetails.dateLabel || selectedServiceDetails.serviceDate}</strong></span>
+                                <span>👥 <strong style={{ color: 'var(--text-main)' }}>{getMembersDisplay(selectedServiceDetails)}</strong></span>
+                                {parseServiceType(selectedServiceDetails.serviceType).type && (
+                                    <span>📍 <strong style={{ color: 'var(--text-main)' }}>{parseServiceType(selectedServiceDetails.serviceType).type}</strong></span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
 
+                    {/* Split content area */}
+                    <div style={{
+                        display: 'flex',
+                        flex: 1,
+                        flexWrap: 'wrap',
+                        gap: '1.5rem',
+                        padding: '1.5rem',
+                        overflowY: 'auto',
+                        boxSizing: 'border-box'
+                    }}>
+                        {/* Section 1: Poesías (Solo para plantillas de poesía) */}
+                        {isPoetry && (
+                            <div style={{
+                                flex: '1 1 340px',
+                                display: 'flex',
+                                flexDirection: 'column',
+                                gap: '1.5rem',
+                                background: 'rgba(255,255,255,0.02)',
+                                borderRadius: '24px',
+                                border: '1px solid var(--border)',
+                                padding: '1.5rem',
+                                boxSizing: 'border-box'
+                            }}>
+                                <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                    📖 Poesías a Recitar
+                                </h3>
+                                {(() => {
+                                    const prog = parsePoetryProgram(selectedServiceDetails.program, members);
+                                    return prog.poems.length > 0 ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                                            {prog.poems.map((poem, idx) => (
+                                                <div 
+                                                    key={idx} 
+                                                    className="glass-panel" 
+                                                    style={{ 
+                                                        padding: '1.75rem', 
+                                                        borderLeft: '4px solid var(--primary)', 
+                                                        background: 'rgba(255,255,255,0.015)',
+                                                        borderRadius: '16px',
+                                                        display: 'flex',
+                                                        flexDirection: 'column',
+                                                        gap: '1rem'
+                                                    }}
+                                                >
+                                                    <h4 style={{ 
+                                                        margin: 0, 
+                                                        fontSize: '1.2rem', 
+                                                        fontFamily: 'Georgia, serif', 
+                                                        color: 'var(--text-main)', 
+                                                        fontWeight: 700,
+                                                        borderBottom: '1px solid rgba(255,255,255,0.05)',
+                                                        paddingBottom: '0.5rem'
+                                                    }}>
+                                                        {poem.name}
+                                                    </h4>
+                                                    <div style={{
+                                                        fontFamily: 'Georgia, serif',
+                                                        fontSize: '1rem',
+                                                        lineHeight: '1.8',
+                                                        color: 'rgba(255, 255, 255, 0.85)',
+                                                        whiteSpace: 'pre-wrap',
+                                                        background: 'rgba(0,0,0,0.15)',
+                                                        padding: '1.25rem',
+                                                        borderRadius: '10px',
+                                                        border: '1px solid rgba(255,255,255,0.03)',
+                                                        maxHeight: '350px',
+                                                        overflowY: 'auto',
+                                                        fontStyle: 'italic',
+                                                        letterSpacing: '0.01em'
+                                                    }}>
+                                                        {poem.content || 'Sin texto registrado.'}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', textAlign: 'center', padding: '3rem 0' }}>
+                                            Ninguna poesía seleccionada para esta salida.
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                        )}
+
+                        {/* Section 2: Programa */}
+                        <div style={{
+                            flex: '1 1 340px',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '1.5rem',
+                            background: 'rgba(255,255,255,0.02)',
+                            borderRadius: '24px',
+                            border: '1px solid var(--border)',
+                            padding: '1.5rem',
+                            boxSizing: 'border-box'
+                        }}>                            <h3 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 800, color: 'var(--primary)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                📝 Programa / Actividad
+                            </h3>
+                            {hasEditPermission ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Editar Notas / Programa</label>
+                                    <textarea
+                                        className="glass-input"
+                                        placeholder="Escribe el programa de la salida o detalles adicionales aquí..."
+                                        rows={12}
+                                        defaultValue={isPoetry ? parsePoetryProgram(selectedServiceDetails.program, members).notes : selectedServiceDetails.program || ''}
+                                        onBlur={async (e) => {
+                                            const text = e.target.value;
+                                            const currentText = isPoetry ? parsePoetryProgram(selectedServiceDetails.program, members).notes : selectedServiceDetails.program || '';
+                                            if (text !== currentText) {
+                                                if (isPoetry) {
+                                                    const current = parsePoetryProgram(selectedServiceDetails.program, members);
+                                                    const updatedProgram = JSON.stringify({
+                                                        poems: current.poems,
+                                                        notes: text
+                                                    });
+                                                    await updateService(selectedServiceDetails.id, { program: updatedProgram });
+                                                    setSelectedServiceDetails(prev => ({ ...prev, program: updatedProgram }));
+                                                } else {
+                                                    await updateService(selectedServiceDetails.id, { program: text });
+                                                    setSelectedServiceDetails(prev => ({ ...prev, program: text }));
+                                                }
+                                            }
+                                        }}
+                                        style={{ 
+                                            width: '100%', 
+                                            flex: 1,
+                                            fontSize: '0.95rem', 
+                                            padding: '1.25rem', 
+                                            borderRadius: '16px', 
+                                            background: 'rgba(0,0,0,0.2)',
+                                            lineHeight: '1.6',
+                                            resize: 'none',
+                                            border: '1px solid var(--border)',
+                                            color: 'var(--text-main)',
+                                            fontFamily: 'inherit'
+                                        }}
+                                    />
+                                </div>
+                            ) : (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', flex: 1 }}>
+                                    <label style={{ fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>Detalles del Programa</label>
+                                    <pre style={{
+                                        margin: 0,
+                                        padding: '1.25rem',
+                                        background: 'rgba(0,0,0,0.2)',
+                                        borderRadius: '16px',
+                                        fontSize: '0.95rem',
+                                        color: 'var(--text-main)',
+                                        whiteSpace: 'pre-wrap',
+                                        fontFamily: 'inherit',
+                                        lineHeight: '1.6',
+                                        flex: 1,
+                                        overflowY: 'auto',
+                                        border: '1px solid var(--border)'
+                                    }}>
+                                        {isPoetry 
+                                            ? (parsePoetryProgram(selectedServiceDetails.program, members).notes || 'Sin detalles del programa.') 
+                                            : (selectedServiceDetails.program || 'Sin detalles del programa.')}
+                                    </pre>
+                                </div>
+                            )}
+
+                            {hasEditPermission && (
+                                <button
+                                    type="button"
+                                    onClick={() => handleToggleFinishProgram(selectedServiceDetails)}
+                                    className="btn"
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.85rem',
+                                        borderRadius: '14px',
+                                        background: parseServiceType(selectedServiceDetails.serviceType).isFinished 
+                                            ? 'linear-gradient(135deg, rgba(16, 185, 129, 0.2) 0%, rgba(5, 150, 105, 0.3) 100%)' 
+                                            : 'linear-gradient(135deg, rgba(239, 68, 68, 0.2) 0%, rgba(185, 28, 28, 0.3) 100%)',
+                                        border: parseServiceType(selectedServiceDetails.serviceType).isFinished 
+                                            ? '1px solid rgba(16, 185, 129, 0.4)' 
+                                            : '1px solid rgba(239, 68, 68, 0.4)',
+                                        color: parseServiceType(selectedServiceDetails.serviceType).isFinished ? '#6ee7b7' : '#fca5a5',
+                                        fontWeight: 700,
+                                        fontSize: '0.95rem',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        gap: '0.5rem',
+                                        cursor: 'pointer',
+                                        marginTop: '1.25rem'
+                                    }}
+                                >
+                                    {parseServiceType(selectedServiceDetails.serviceType).isFinished 
+                                        ? '✅ Programa Finalizado (Clic para reactivar)' 
+                                        : '🏁 Se acabó el programa'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
             <AssignServiceModal
                 isOpen={isAssignModalOpen}
                 onClose={() => setIsAssignModalOpen(false)}
