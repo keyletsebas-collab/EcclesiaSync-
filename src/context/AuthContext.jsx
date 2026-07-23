@@ -44,6 +44,17 @@ const getNamesAndPhonesForUser = (userObj) => {
     return { names, phones };
 };
 
+const generateUserCode = (str) => {
+    let hash = 0;
+    const input = String(str || Math.random());
+    for (let i = 0; i < input.length; i++) {
+        hash = (hash << 5) - hash + input.charCodeAt(i);
+        hash |= 0;
+    }
+    const hex = Math.abs(hash).toString(16).toUpperCase().padStart(6, '0').slice(-6);
+    return `EC-${hex}`;
+};
+
 // Helper to convert DB user row to app user object
 const mapUserToObj = (row) => {
     if (!row) return null;
@@ -74,6 +85,8 @@ const mapUserToObj = (row) => {
         });
     }
 
+    const userCode = row.user_code || generateUserCode(row.uid);
+
     return {
         uid: row.uid,
         username: row.username,
@@ -84,7 +97,8 @@ const mapUserToObj = (row) => {
         isBlocked: row.is_blocked,
         memberships,
         birthday: row.birthday,
-        address: row.address
+        address: row.address,
+        userCode: userCode
     };
 };
 
@@ -134,14 +148,20 @@ export const AuthProvider = ({ children }) => {
                     .from('users')
                     .select('*')
                     .eq('uid', currentUser.uid)
-                    .single();
+                    .maybeSingle();
 
                 if (error) throw error;
-                if (data) {
+                if (!data || data.is_blocked) {
+                    console.log('🔒 La cuenta ya no existe en la base de datos o está bloqueada. Cerrando sesión...');
+                    setCurrentUser(null);
+                } else {
                     setCurrentUser(mapUserToObj(data));
                 }
             } catch (err) {
                 console.error('Failed to refresh user on mount:', err);
+                if (err.code === 'PGRST116') {
+                    setCurrentUser(null);
+                }
             }
         };
         refreshUser();
@@ -150,7 +170,7 @@ export const AuthProvider = ({ children }) => {
         }
     }, [currentUser?.uid]);
 
-    // Realtime subscription for users table (instant membership revocation, role updates, and blocking)
+    // Realtime subscription for users table (instant membership revocation, role updates, deletion, and blocking)
     useEffect(() => {
         if (!currentUser?.uid) return;
 
@@ -164,6 +184,13 @@ export const AuthProvider = ({ children }) => {
             }, (payload) => {
                 console.log('⚡ [AuthContext Realtime] Users table changed in DB:', payload);
                 fetchUsers();
+
+                if (payload.eventType === 'DELETE' && (payload.old?.uid === currentUser.uid || payload.old?.username === currentUser.username)) {
+                    alert('Tu cuenta ha sido eliminada por un administrador.');
+                    setCurrentUser(null);
+                    return;
+                }
+
                 if (payload.new && payload.new.uid === currentUser.uid) {
                     const updatedUser = mapUserToObj(payload.new);
 
@@ -274,8 +301,6 @@ export const AuthProvider = ({ children }) => {
                         number: nextNumber,
                         phone: phone?.trim() || '',
                         identifications: {
-                            familyRole: '',
-                            familyName: '',
                             hasKey: false,
                             needsPrayer: false
                         },
@@ -339,6 +364,8 @@ export const AuthProvider = ({ children }) => {
                 email: username
             }];
 
+            const userCode = generateUserCode(uid);
+
             const newUserRow = {
                 uid,
                 username,
@@ -348,7 +375,8 @@ export const AuthProvider = ({ children }) => {
                 created_at: createdAt,
                 is_blocked: false,
                 memberships,
-                birthday: birthday ? birthday.trim() : null
+                birthday: birthday ? birthday.trim() : null,
+                user_code: userCode
             };
 
             const { error: insErr } = await supabase.from('users').insert([newUserRow]);
@@ -470,6 +498,10 @@ export const AuthProvider = ({ children }) => {
                 .eq('uid', uid);
 
             if (error) throw error;
+
+            if (currentUser?.uid === uid) {
+                setCurrentUser(null);
+            }
 
             // Cascade delete the associated members in templates
             if (userToDelete) {
@@ -715,6 +747,17 @@ export const AuthProvider = ({ children }) => {
         return membership?.role === 'master' || membership?.role === 'editor';
     };
 
+    const canCreateTemplate = () => {
+        if (!currentUser) return false;
+        if (currentUser.isMaster) return true;
+        // User's own primary church always allows template creation
+        if (activeAccountId === currentUser.accountId) return true;
+        const membership = currentUser.memberships?.find(m => m.id === activeAccountId);
+        if (!membership) return false;
+        if (membership.role === 'viewer') return false;
+        return membership.role === 'master' || membership.role === 'editor';
+    };
+
     const createChurch = async (churchName) => {
         if (!currentUser) return { success: false, error: 'Not logged in' };
         try {
@@ -787,6 +830,7 @@ export const AuthProvider = ({ children }) => {
         setActiveAccountId,
         isAuthenticated: !!currentUser,
         canEdit: canEdit(),
+        canCreateTemplate: canCreateTemplate(),
         loading,
         users,
         signup,

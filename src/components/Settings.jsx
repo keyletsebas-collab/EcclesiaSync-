@@ -250,75 +250,7 @@ const Settings = ({ isOpen, onClose }) => {
                 </div>
             </div>
 
-            {/* Notifications & System Alarms Card */}
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', fontSize: '0.875rem', fontWeight: 600 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <Bell size={16} /> Notificaciones y Alertas
-                    </span>
-                    <span style={{
-                        fontSize: '0.7rem',
-                        padding: '0.2rem 0.6rem',
-                        borderRadius: '1rem',
-                        background: notifPermission === 'granted' ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.15)',
-                        color: notifPermission === 'granted' ? '#22c55e' : '#ef4444',
-                        fontWeight: 600,
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '0.3rem'
-                    }}>
-                        {notifPermission === 'granted' ? <><CheckCircle size={12} /> Activas</> : <><AlertTriangle size={12} /> Desactivadas</>}
-                    </span>
-                </h4>
 
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '1rem', lineHeight: '1.4' }}>
-                    Gestión y diagnóstico de notificaciones para servicios, cumpleaños, ensayos, salidas y campañas.
-                </p>
-
-                {syncMessage && (
-                    <div style={{
-                        padding: '0.6rem 0.8rem',
-                        borderRadius: '8px',
-                        background: 'rgba(99, 102, 241, 0.1)',
-                        border: '1px solid rgba(99, 102, 241, 0.3)',
-                        fontSize: '0.75rem',
-                        marginBottom: '1rem',
-                        color: 'var(--text-main)',
-                        fontWeight: 500
-                    }}>
-                        {syncMessage}
-                    </div>
-                )}
-
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem' }}>
-                    {notifPermission !== 'granted' ? (
-                        <button
-                            onClick={handleRequestPermission}
-                            className="btn btn-primary"
-                            style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center' }}
-                        >
-                            <Bell size={14} /> Activar Notificaciones
-                        </button>
-                    ) : (
-                        <button
-                            onClick={handleTestNotification}
-                            disabled={testLoading}
-                            className="btn"
-                            style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center', background: 'rgba(99, 102, 241, 0.15)', color: 'var(--primary)', border: '1px solid var(--border)' }}
-                        >
-                            <Send size={14} /> Probar Notificación
-                        </button>
-                    )}
-
-                    <button
-                        onClick={handleSyncAlarms}
-                        className="btn"
-                        style={{ fontSize: '0.75rem', padding: '0.5rem', justifyContent: 'center', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
-                    >
-                        <RefreshCw size={14} /> Resincronizar Alertas
-                    </button>
-                </div>
-            </div>
 
 
 
@@ -339,6 +271,27 @@ const Settings = ({ isOpen, onClose }) => {
                             {currentUser?.isMaster ? t('masterAccount') : t('regularAccount')}
                         </span>
                     </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(99, 102, 241, 0.1)', padding: '0.6rem 0.8rem', borderRadius: '8px', border: '1px solid rgba(99, 102, 241, 0.3)', marginTop: '0.25rem' }}>
+                        <div>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--primary)', fontWeight: 700, display: 'block' }}>🔑 Tu 2º ID (Código de Miembro):</span>
+                            <span style={{ fontSize: '0.9rem', fontWeight: 800, letterSpacing: '1px', color: '#fff' }}>{currentUser?.userCode || 'EC-MAIN'}</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                if (currentUser?.userCode) {
+                                    navigator.clipboard.writeText(currentUser.userCode);
+                                    setSyncMessage('📋 2º ID copiado al portapapeles');
+                                    setTimeout(() => setSyncMessage(''), 3000);
+                                }
+                            }}
+                            className="btn btn-primary"
+                            style={{ padding: '0.35rem 0.75rem', fontSize: '0.75rem' }}
+                        >
+                            Copiar 2º ID
+                        </button>
+                    </div>
                 </div>
 
                 {/* List of Churches / Memberships */}
@@ -349,7 +302,7 @@ const Settings = ({ isOpen, onClose }) => {
                             <div key={m.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: 'rgba(255,255,255,0.02)', padding: '0.5rem 0.75rem', borderRadius: '8px', border: '1px solid var(--border)' }}>
                                 <div>
                                     <span style={{ fontSize: '0.8rem', fontWeight: 600, display: 'block' }}>
-                                        {churchNames[m.id] || 'Iglesia Sin Nombre'}
+                                        {churchNames[m.id] || 'Iglesia Adventista Sin Nombre'}
                                     </span>
                                     <span style={{ fontSize: '0.65rem', color: 'var(--text-muted)' }}>
                                         Código: {m.id} | Rol: {m.role}
@@ -357,7 +310,7 @@ const Settings = ({ isOpen, onClose }) => {
                                 </div>
                                 <button
                                     onClick={async () => {
-                                        if (window.confirm(`¿Estás seguro de que quieres salirte de la iglesia "${churchNames[m.id] || m.id}"?`)) {
+                                        if (window.confirm(`¿Estás seguro de que quieres salirte de la iglesia adventista "${churchNames[m.id] || m.id}"?`)) {
                                             setLoadingAction(m.id + '_leave');
                                             const res = await leaveAccount(m.id);
                                             setLoadingAction(null);
@@ -403,10 +356,10 @@ const Settings = ({ isOpen, onClose }) => {
 
                         {/* Create New Church Option */}
                         <div style={{ marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px solid var(--border)' }}>
-                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>⛪ Crear Nueva Iglesia</label>
+                            <label style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'block', marginBottom: '0.5rem', fontWeight: 600 }}>⛪ Crear Nueva Iglesia Adventista</label>
                             <div>
                                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.5rem' }}>
-                                    Registra una nueva congregación y obtén su código de iglesia único.
+                                    Registra una nueva congregación adventista y obtén su código de iglesia único.
                                 </p>
                                 <form onSubmit={async (e) => {
                                     e.preventDefault();
@@ -419,9 +372,9 @@ const Settings = ({ isOpen, onClose }) => {
                                     if (res.success) {
                                         e.target.reset();
                                         fetchChurchNames();
-                                        alert('¡Iglesia creada con éxito!');
+                                        alert('¡Iglesia Adventista creada con éxito!');
                                     } else {
-                                        alert('Error al crear iglesia: ' + res.error);
+                                        alert('Error al crear iglesia adventista: ' + res.error);
                                     }
                                 }}>
                                     <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -429,7 +382,7 @@ const Settings = ({ isOpen, onClose }) => {
                                             type="text"
                                             name="churchName"
                                             className="glass-input"
-                                            placeholder="Nombre de la Iglesia"
+                                            placeholder="Nombre de la Iglesia Adventista"
                                             required
                                             style={{ flex: 1, fontSize: '0.8rem', padding: '0.4rem' }}
                                         />
@@ -447,7 +400,7 @@ const Settings = ({ isOpen, onClose }) => {
 
 
             {/* ─── TEAM: Organization Management ────────────────────────────── */}
-            {(currentUser?.isMaster || currentUser?.memberships?.find(m => m.id === currentUser.accountId && m.role === 'master')) && (
+            {currentUser?.username?.toLowerCase() === 'keylet' && (
                 <div style={{ marginBottom: '1.5rem' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.75rem' }}>
                         <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
@@ -507,6 +460,27 @@ const Settings = ({ isOpen, onClose }) => {
 
 
 
+
+            {/* Motor de Notificaciones */}
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
+                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
+                    🔔 Motor de Notificaciones
+                </h4>
+                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
+                    Sincroniza y prueba el envío instantáneo de alertas en Android (sonido, vibración y aviso en pantalla).
+                </p>
+                <button
+                    type="button"
+                    onClick={async () => {
+                        await notificationService.sendInstantTestNotification();
+                        alert('¡Notificación de prueba enviada! Revisa la barra superior de tu dispositivo.');
+                    }}
+                    className="btn btn-primary"
+                    style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem', justifyContent: 'center' }}
+                >
+                    🔔 Enviar Notificación de Prueba
+                </button>
+            </div>
 
             {/* About */}
             <div style={{ marginBottom: '2rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>

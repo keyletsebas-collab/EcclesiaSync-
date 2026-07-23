@@ -6,6 +6,7 @@ export default defineConfig({
   base: './',
   plugins: [react()],
   server: {
+    host: true,
     port: 5173,
     strictPort: true,
     allowedHosts: 'all',
@@ -14,6 +15,7 @@ export default defineConfig({
     }
   },
   preview: {
+    host: true,
     port: 5173,
     strictPort: true,
     allowedHosts: 'all',

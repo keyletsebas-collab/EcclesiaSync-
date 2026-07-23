@@ -150,8 +150,6 @@ function App() {
           : isSonido
             ? { hasKey: false }
             : {
-                familyRole: '',
-                familyName: '',
                 hasKey: false,
                 needsPrayer: false
               };

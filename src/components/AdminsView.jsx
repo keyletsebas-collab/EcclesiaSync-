@@ -75,7 +75,7 @@ const AdminsView = () => {
                         mapped.push({
                             templateId: null,
                             code: code,
-                            name: `Iglesia ${code} (Sin nombre asignado)`,
+                            name: `Iglesia Adventista ${code} (Sin nombre asignado)`,
                             creatorUid: 'legacy',
                             creatorUsername: 'Legacy / Desconocido',
                             createdAt: new Date().toISOString()
@@ -93,7 +93,7 @@ const AdminsView = () => {
     };
 
     const handleDeleteChurch = async (churchCode) => {
-        if (!window.confirm(`¿Estás completamente seguro de eliminar esta iglesia (${churchCode})? Esta acción eliminará permanentemente la iglesia, todas sus plantillas, miembros, salidas, transacciones e información asociada. Esta acción no se puede deshacer.`)) {
+        if (!window.confirm(`¿Estás completamente seguro de eliminar esta iglesia adventista (${churchCode})? Esta acción eliminará permanentemente la iglesia adventista, todas sus plantillas, miembros, salidas, transacciones e información asociada. Esta acción no se puede deshacer.`)) {
             return;
         }
         
@@ -345,11 +345,11 @@ const AdminsView = () => {
                         fontSize: '1.1rem',
                         fontWeight: 600
                     }}>
-                        ⛪ Gestión Global de Iglesias (Super Admin)
+                        ⛪ Gestión Global de Iglesias Adventistas (Super Admin)
                     </h3>
                     
                     {loadingChurches ? (
-                        <div style={{ color: 'var(--text-muted)' }}>Cargando iglesias...</div>
+                        <div style={{ color: 'var(--text-muted)' }}>Cargando iglesias adventistas...</div>
                     ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
                             {churches.map(c => {

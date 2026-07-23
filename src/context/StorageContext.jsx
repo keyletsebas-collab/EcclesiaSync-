@@ -139,18 +139,34 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         const isPoetry = lowerType.includes('poesía') || lowerType.includes('poesia') || templateName.includes('poesía') || templateName.includes('poesia');
         const isUserAssigned = assignedMembers?.some(m => m.name?.toLowerCase() === currentUser?.username?.toLowerCase()) || service.member_name?.toLowerCase() === currentUser?.username?.toLowerCase();
 
-        if (isPoetry) {
+        if (isCampaign) {
+            const templateObj = templates.find(t => t.id === service.template_id);
+            const isSo = templateObj?.customFields?.includes('__sonido__') || templateObj?.name?.toLowerCase().includes('sonido');
+            const isPo = templateObj?.customFields?.includes('__poetry__') || templateObj?.name?.toLowerCase().includes('poesia') || templateObj?.name?.toLowerCase().includes('poesía');
+            if (isPo) {
+                notificationService.notifyPoetryCampaignCreated(serviceType, serviceDate, program);
+            } else if (isSo) {
+                notificationService.notifySonidoCampaignCreated(serviceType, serviceDate, program);
+            } else {
+                notificationService.notifyDiaconosCampaignCreated(serviceType, serviceDate, program);
+            }
+        } else if (isPoetry) {
             notificationService.notifyPoetryCreated(
                 serviceType,
                 serviceDate,
                 service.program
             );
         } else if (isRehearsal) {
-            notificationService.notifyRehearsalOrOutingCreated(
-                serviceType && !serviceType.toLowerCase().includes('ensayo') ? `Ensayo (${serviceType})` : (serviceType || 'Ensayo'),
-                `Fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`,
-                false
-            );
+            const templateObj = templates.find(t => t.id === service.template_id);
+            const isSo = templateObj?.customFields?.includes('__sonido__') || templateObj?.name?.toLowerCase().includes('sonido');
+            const isPo = templateObj?.customFields?.includes('__poetry__') || templateObj?.name?.toLowerCase().includes('poesia') || templateObj?.name?.toLowerCase().includes('poesía');
+            if (isPo) {
+                notificationService.notifyPoetryRehearsalCreated(serviceType, serviceDate);
+            } else if (isSo) {
+                notificationService.notifySonidoMeetingCreated(serviceType, serviceDate);
+            } else {
+                notificationService.notifyDiaconosMeetingCreated(serviceType, serviceDate);
+            }
         } else if (isOuting) {
             notificationService.notifyRehearsalOrOutingCreated(
                 serviceType && !serviceType.toLowerCase().includes('salida') ? `Salida (${serviceType})` : (serviceType || 'Salida'),
@@ -169,19 +185,28 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const processRealtimeProgram = (prog) => {
-        if (!prog || prog.account_id !== accountId) return;
-        notificationService.notifyProgramCreated(prog.title, prog.content);
+        if (!prog) return;
+        const templateObj = templates.find(t => t.id === prog.template_id);
+        const isSo = templateObj?.customFields?.includes('__sonido__') || templateObj?.name?.toLowerCase().includes('sonido');
+        const isPo = templateObj?.customFields?.includes('__poetry__') || templateObj?.name?.toLowerCase().includes('poesia') || templateObj?.name?.toLowerCase().includes('poesía');
+        if (isPo) {
+            notificationService.notifyPoetryProgramCreated(prog.title, prog.content);
+        } else if (isSo) {
+            notificationService.notifySonidoProgramCreated(prog.title, prog.content);
+        } else {
+            notificationService.notifyDiaconosProgramCreated(prog.title, prog.content);
+        }
     };
 
     const processRealtimeTemplate = (newTemplateRow) => {
-        if (!newTemplateRow || newTemplateRow.account_id !== accountId) return;
+        if (!newTemplateRow) return;
 
         // Find existing template in state to compare
         const oldTemplate = templates.find(t => t.id === newTemplateRow.id);
         if (!oldTemplate) return;
 
         // Extract schedules from old and new
-        const oldSchedulesField = (oldTemplate.customFields || []).find(f => f && typeof f === 'string' && f.startsWith('__rehearsalSchedules:'));
+        const oldSchedulesField = (oldTemplate.customFields || []).find(f => f && typeof f === 'string' && (f.startsWith('__rehearsalSchedules:') || f.startsWith('__staffMeetingSchedules:')));
         let newCustomFields = [];
         if (typeof newTemplateRow.custom_fields === 'string') {
             try {
@@ -193,19 +218,24 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         if (!Array.isArray(newCustomFields)) {
             newCustomFields = [];
         }
-        const newSchedulesField = newCustomFields.find(f => f && typeof f === 'string' && f.startsWith('__rehearsalSchedules:'));
+        const newSchedulesField = newCustomFields.find(f => f && typeof f === 'string' && (f.startsWith('__rehearsalSchedules:') || f.startsWith('__staffMeetingSchedules:')));
 
         if (newSchedulesField && newSchedulesField !== oldSchedulesField) {
-            // Rehearsal schedules changed! Trigger notification.
             try {
-                const schedStr = newSchedulesField.replace('__rehearsalSchedules:', '');
+                const prefix = newSchedulesField.startsWith('__staffMeetingSchedules:') ? '__staffMeetingSchedules:' : '__rehearsalSchedules:';
+                const schedStr = newSchedulesField.replace(prefix, '');
                 const validSchedules = JSON.parse(schedStr);
                 if (validSchedules && validSchedules.length > 0) {
-                    const schedDesc = validSchedules.map(s => `${s.days} a las ${s.time} (${s.modality})`).join(', ');
-                    notificationService.notifyRehearsalOrOutingCreated(
-                        `Horario de Ensayos Actualizado (${newTemplateRow.name || oldTemplate.name})`,
-                        `Días de ensayo: ${schedDesc}`
-                    );
+                    const schedDesc = validSchedules.map(s => `${s.days} a las ${s.time} (${s.modality || 'Presencial'})`).join(', ');
+                    const isSo = newTemplateRow.name?.toLowerCase().includes('sonido');
+                    const isPo = newTemplateRow.name?.toLowerCase().includes('poesia') || newTemplateRow.name?.toLowerCase().includes('poesía');
+                    if (isPo) {
+                        notificationService.notifyPoetryRehearsalCreated(schedDesc);
+                    } else if (isSo) {
+                        notificationService.notifySonidoMeetingCreated(schedDesc);
+                    } else {
+                        notificationService.notifyDiaconosMeetingCreated(schedDesc);
+                    }
                 }
             } catch (e) {
                 console.error('Error parsing updated rehearsal schedules:', e);
@@ -291,6 +321,29 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             return;
         }
         fetchData();
+    }, [accountId, currentUser?.uid]);
+
+    // Auto-sync on app resume / window focus / tab activation
+    useEffect(() => {
+        const handleFocusOrResume = () => {
+            if (currentUser && accountId) {
+                console.log('🔄 App resumed / window focused -> Syncing latest data from Supabase...');
+                fetchData();
+            }
+        };
+
+        window.addEventListener('focus', handleFocusOrResume);
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                handleFocusOrResume();
+            }
+        };
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+
+        return () => {
+            window.removeEventListener('focus', handleFocusOrResume);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+        };
     }, [accountId, currentUser?.uid]);
 
     // Realtime Sync Hook
@@ -492,14 +545,104 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     const addMember = async (templateId, memberData) => {
         const tempId = generateUUID();
+        const userCodeInput = memberData.userCode || memberData.identifications?.userCode || '';
+        let memberName = memberData.name || '';
+        let linkedIdentifications = { ...(memberData.identifications || {}) };
+
+        if (userCodeInput.trim()) {
+            const cleanCode = userCodeInput.trim().toUpperCase();
+            linkedIdentifications.userCode = cleanCode;
+
+            try {
+                const { data: matchedUsers, error: userSearchErr } = await supabase
+                    .from('users')
+                    .select('*');
+
+                if (!userSearchErr && matchedUsers) {
+                    const matchedUserRow = matchedUsers.find(u => {
+                        const code = u.user_code || '';
+                        return code.toUpperCase() === cleanCode;
+                    });
+
+                    if (matchedUserRow) {
+                        if (!memberName) {
+                            memberName = matchedUserRow.username;
+                        }
+
+                        let targetMemberships = typeof matchedUserRow.memberships === 'string'
+                            ? JSON.parse(matchedUserRow.memberships)
+                            : (matchedUserRow.memberships || []);
+
+                        const existingMemIndex = targetMemberships.findIndex(m => m.id === accountId);
+
+                        if (existingMemIndex >= 0) {
+                            const currentMem = targetMemberships[existingMemIndex];
+                            const currentAllowed = currentMem.allowedTemplateIds || [];
+                            if (!currentAllowed.includes(templateId)) {
+                                targetMemberships[existingMemIndex] = {
+                                    ...currentMem,
+                                    allowedTemplateIds: [...currentAllowed, templateId]
+                                };
+                            }
+                        } else {
+                            targetMemberships.push({
+                                id: accountId,
+                                role: 'viewer',
+                                allowedTemplateIds: [templateId],
+                                fullName: memberName || matchedUserRow.username,
+                                phone: memberData.phone || '',
+                                email: matchedUserRow.username
+                            });
+                        }
+
+                        await supabase
+                            .from('users')
+                            .update({ memberships: targetMemberships })
+                            .eq('uid', matchedUserRow.uid);
+
+                        console.log(`🔗 2º ID vinculado: Otorgado acceso a usuario ${matchedUserRow.username} para la plantilla ${templateId} en la iglesia ${accountId}`);
+                    }
+                }
+            } catch (e) {
+                console.error('Error linking member via 2nd ID:', e);
+            }
+        }
+
+        // Self-unlock template if currentUser is joining a template in this account
+        if (currentUser) {
+            try {
+                const userMemIndex = (currentUser.memberships || []).findIndex(m => m.id === accountId);
+                if (userMemIndex >= 0) {
+                    const currentMem = currentUser.memberships[userMemIndex];
+                    if (currentMem.allowedTemplateIds && Array.isArray(currentMem.allowedTemplateIds)) {
+                        if (!currentMem.allowedTemplateIds.includes(templateId)) {
+                            const updatedAllowed = [...currentMem.allowedTemplateIds, templateId];
+                            const updatedMemberships = [...currentUser.memberships];
+                            updatedMemberships[userMemIndex] = {
+                                ...currentMem,
+                                allowedTemplateIds: updatedAllowed
+                            };
+                            await supabase
+                                .from('users')
+                                .update({ memberships: updatedMemberships })
+                                .eq('uid', currentUser.uid);
+                            console.log(`🔓 Desbloqueada plantilla ${templateId} para el usuario ${currentUser.username}`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('Error updating allowedTemplateIds for self user:', err);
+            }
+        }
+
         const newMemberRow = {
             id: tempId,
             template_id: templateId,
             account_id: accountId,
-            name: memberData.name,
+            name: memberName || 'Miembro',
             number: (memberData.number === '' || memberData.number === null || memberData.number === undefined) ? 0 : parseInt(memberData.number, 10),
             phone: memberData.phone || '',
-            identifications: memberData.identifications || {},
+            identifications: linkedIdentifications,
             created_at: new Date().toISOString()
         };
         
@@ -663,10 +806,13 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
     const addProgram = async (templateId, programData) => {
         const tempId = generateUUID();
+        const template = templates.find(t => t.id === templateId);
+        const targetAccountId = template?.accountId || accountId;
+
         const newProgramRow = {
             id: tempId,
             template_id: templateId,
-            account_id: accountId,
+            account_id: targetAccountId,
             title: programData.title,
             content: programData.content,
             created_at: new Date().toISOString()
@@ -704,10 +850,30 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         }
     };
 
+    const activeMembership = currentUser?.memberships?.find(m => m.id === accountId);
+    const allowedTemplateIds = activeMembership?.allowedTemplateIds;
+
+    const visibleTemplates = (templates || []).filter(t => {
+        if (t.name === '__church_metadata__') return false;
+        if (allowedTemplateIds && Array.isArray(allowedTemplateIds) && allowedTemplateIds.length > 0) {
+            return allowedTemplateIds.includes(t.id);
+        }
+        return true;
+    });
+
+    const visibleTemplateIds = new Set(visibleTemplates.map(t => t.id));
+
+    const visibleMembers = (members || []).filter(m => visibleTemplateIds.has(m.templateId || m.template_id));
+    const visibleServices = (services || []).filter(s => visibleTemplateIds.has(s.templateId || s.template_id));
+    const visiblePrograms = (programs || []).filter(p => visibleTemplateIds.has(p.templateId || p.template_id));
+
     const value = {
-        templates,
-        members,
-        services,
+        templates: visibleTemplates,
+        allTemplates: templates,
+        members: visibleMembers,
+        allMembers: members,
+        services: visibleServices,
+        allServices: services,
         loading,
         addTemplate,
         updateTemplate,
@@ -718,7 +884,8 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         addService,
         updateService,
         deleteService,
-        programs,
+        programs: visiblePrograms,
+        allPrograms: programs,
         addProgram,
         deleteProgram,
         refreshData: fetchData

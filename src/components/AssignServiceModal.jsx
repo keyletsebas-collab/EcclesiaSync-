@@ -3,6 +3,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { useStorage } from '../context/StorageContext';
 import Modal from './Modal';
 import { Calendar, Users, Flame, Info } from 'lucide-react';
+import notificationService from '../utils/NotificationService';
 
 const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], isPoetry, isSonido, onAssign }) => {
     const { t } = useLanguage();
@@ -63,6 +64,37 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
         }
 
         onAssign(primaryMember.id, primaryMember.name, serviceDate, finalServiceType, selectedMembers, programText);
+
+        // Trigger Specialized Notifications
+        try {
+            if (isPoetry) {
+                if (eventType === 'outing' || finalServiceType.toLowerCase().includes('salida')) {
+                    notificationService.notifyPoetryOutingCreated(finalServiceType, programText, serviceDate);
+                } else if (eventType === 'rehearsal' || finalServiceType.toLowerCase().includes('ensayo')) {
+                    notificationService.notifyPoetryRehearsalCreated(finalServiceType, serviceDate);
+                } else if (eventType === 'campaign' || isCampaign) {
+                    notificationService.notifyPoetryCampaignCreated(finalServiceType, serviceDate, programText);
+                }
+            } else if (isSonido) {
+                if (eventType === 'campaign' || isCampaign) {
+                    notificationService.notifySonidoCampaignCreated(finalServiceType, serviceDate, programText);
+                } else if (eventType === 'rehearsal' || finalServiceType.toLowerCase().includes('reunión') || finalServiceType.toLowerCase().includes('reunion')) {
+                    notificationService.notifySonidoMeetingCreated(finalServiceType, serviceDate);
+                } else {
+                    notificationService.notifySonidoTurnoCreated(primaryMember.name, finalServiceType, serviceDate);
+                }
+            } else { // Diáconos / Cultos
+                if (eventType === 'campaign' || isCampaign) {
+                    notificationService.notifyDiaconosCampaignCreated(finalServiceType, serviceDate, programText);
+                } else if (eventType === 'rehearsal' || finalServiceType.toLowerCase().includes('reunión') || finalServiceType.toLowerCase().includes('reunion')) {
+                    notificationService.notifyDiaconosMeetingCreated(finalServiceType, serviceDate);
+                } else {
+                    notificationService.notifyDiaconosServiceCreated(primaryMember.name, finalServiceType, serviceDate);
+                }
+            }
+        } catch (err) {
+            console.error('Error triggering notification:', err);
+        }
 
         // Reset
         setSelectedMemberIds([]);
@@ -206,7 +238,7 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--text-muted)' }}>
                         Tipo de Actividad / Evento
                     </label>
-                    <div style={{ display: 'grid', gridTemplateColumns: isPoetry ? 'repeat(4, 1fr)' : 'repeat(2, 1fr)', gap: '0.5rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isPoetry ? 'repeat(4, 1fr)' : 'repeat(3, 1fr)', gap: '0.5rem' }}>
                         <button
                             type="button"
                             onClick={() => { setEventType('regular'); setIsCampaign(false); }}
@@ -224,43 +256,41 @@ const AssignServiceModal = ({ isOpen, onClose, templateId, members, poems = [], 
                         >
                             📅 Servicio
                         </button>
+                        <button
+                            type="button"
+                            onClick={() => { setEventType('rehearsal'); setIsCampaign(false); }}
+                            style={{
+                                padding: '0.6rem 0.3rem',
+                                borderRadius: '10px',
+                                fontSize: '0.75rem',
+                                fontWeight: 700,
+                                border: eventType === 'rehearsal' ? '1px solid #3b82f6' : '1px solid var(--border)',
+                                background: eventType === 'rehearsal' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.02)',
+                                color: eventType === 'rehearsal' ? '#93c5fd' : 'var(--text-muted)',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                            }}
+                        >
+                            🤝 {isPoetry ? 'Ensayo' : 'Reunión'}
+                        </button>
                         {isPoetry && (
-                            <>
-                                <button
-                                    type="button"
-                                    onClick={() => { setEventType('rehearsal'); setIsCampaign(false); }}
-                                    style={{
-                                        padding: '0.6rem 0.3rem',
-                                        borderRadius: '10px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 700,
-                                        border: eventType === 'rehearsal' ? '1px solid #3b82f6' : '1px solid var(--border)',
-                                        background: eventType === 'rehearsal' ? 'rgba(59, 130, 246, 0.2)' : 'rgba(255,255,255,0.02)',
-                                        color: eventType === 'rehearsal' ? '#93c5fd' : 'var(--text-muted)',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                >
-                                    🎼 Ensayo
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => { setEventType('outing'); setIsCampaign(false); }}
-                                    style={{
-                                        padding: '0.6rem 0.3rem',
-                                        borderRadius: '10px',
-                                        fontSize: '0.75rem',
-                                        fontWeight: 700,
-                                        border: eventType === 'outing' ? '1px solid #8b5cf6' : '1px solid var(--border)',
-                                        background: eventType === 'outing' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.02)',
-                                        color: eventType === 'outing' ? '#c4b5fd' : 'var(--text-muted)',
-                                        cursor: 'pointer',
-                                        transition: 'all 0.2s ease'
-                                    }}
-                                >
-                                    🚌 Salida
-                                </button>
-                            </>
+                            <button
+                                type="button"
+                                onClick={() => { setEventType('outing'); setIsCampaign(false); }}
+                                style={{
+                                    padding: '0.6rem 0.3rem',
+                                    borderRadius: '10px',
+                                    fontSize: '0.75rem',
+                                    fontWeight: 700,
+                                    border: eventType === 'outing' ? '1px solid #8b5cf6' : '1px solid var(--border)',
+                                    background: eventType === 'outing' ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.02)',
+                                    color: eventType === 'outing' ? '#c4b5fd' : 'var(--text-muted)',
+                                    cursor: 'pointer',
+                                    transition: 'all 0.2s ease'
+                                }}
+                            >
+                                🚌 Salida
+                            </button>
                         )}
                         <button
                             type="button"

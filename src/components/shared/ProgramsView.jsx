@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { useStorage } from '../../context/StorageContext';
 import { Trash2 } from 'lucide-react';
+import notificationService from '../../utils/NotificationService';
 
 const ProgramsView = ({ templateId, accountId, isTemplateEditor }) => {
-    const { programs, addProgram, deleteProgram } = useStorage();
+    const { templates, programs, addProgram, deleteProgram } = useStorage();
     const [title, setTitle] = useState('');
     const [content, setContent] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
 
+    const template = (templates || []).find(t => t.id === templateId);
     const templatePrograms = (programs || []).filter(p => p.templateId === templateId);
 
     const filteredPrograms = templatePrograms.filter(p => 
@@ -19,6 +21,22 @@ const ProgramsView = ({ templateId, accountId, isTemplateEditor }) => {
         e.preventDefault();
         if (!title.trim() || !content.trim()) return;
         await addProgram(templateId, { title: title.trim(), content: content.trim() });
+
+        try {
+            const isPo = template?.customFields?.includes('__poetry__') || template?.name?.toLowerCase().includes('poesia') || template?.name?.toLowerCase().includes('poesía');
+            const isSo = template?.customFields?.includes('__sonido__') || template?.name?.toLowerCase().includes('sonido') || template?.name?.toLowerCase().includes('audio');
+
+            if (isPo) {
+                await notificationService.notifyPoetryProgramCreated(title.trim(), content.trim());
+            } else if (isSo) {
+                await notificationService.notifySonidoProgramCreated(title.trim(), content.trim());
+            } else {
+                await notificationService.notifyDiaconosProgramCreated(title.trim(), content.trim());
+            }
+        } catch (err) {
+            console.error('Error sending program notification:', err);
+        }
+
         setTitle('');
         setContent('');
     };

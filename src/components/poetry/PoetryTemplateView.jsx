@@ -92,6 +92,12 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
             }
         });
 
+        try {
+            await notificationService.notifyPoetryAdded(newPoemTitle.trim(), newPoemAuthor.trim());
+        } catch (err) {
+            console.error('Error sending poem notification:', err);
+        }
+
         setNewPoemTitle('');
         setNewPoemAuthor('');
         setNewPoemContent('');

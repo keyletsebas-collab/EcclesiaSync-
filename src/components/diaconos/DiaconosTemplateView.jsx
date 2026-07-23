@@ -8,6 +8,7 @@ import Modal from '../Modal';
 import DiaconosServicesView from './DiaconosServicesView';
 import ProgramsView from '../shared/ProgramsView';
 import FinancesView from '../shared/FinancesView';
+import notificationService from '../../utils/NotificationService';
 
 const DiaconosTemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
@@ -24,8 +25,6 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
         number: '',
         phone: '',
         isLeader: false,
-        familyName: '',
-        familyRole: 'Jefe de familia',
         hasKey: false,
         needsPrayer: false
     });
@@ -62,8 +61,7 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
 
     const filteredMembers = templateMembers.filter(m => 
         m.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.phone?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        m.identifications?.familyName?.toLowerCase().includes(searchTerm.toLowerCase())
+        m.phone?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
     const handleAddMember = async (e) => {
@@ -76,20 +74,24 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
             phone: newMember.phone.trim(),
             isLeader: newMember.isLeader,
             identifications: {
-                familyName: newMember.familyName.trim(),
-                familyRole: newMember.familyRole,
                 hasKey: newMember.hasKey,
                 needsPrayer: newMember.needsPrayer
             }
         });
+
+        if (newMember.needsPrayer) {
+            try {
+                await notificationService.notifyPrayerRequestCreated(newMember.name.trim());
+            } catch (e) {
+                console.error(e);
+            }
+        }
 
         setNewMember({
             name: '',
             number: '',
             phone: '',
             isLeader: false,
-            familyName: '',
-            familyRole: 'Jefe de familia',
             hasKey: false,
             needsPrayer: false
         });
@@ -238,11 +240,6 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
                                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
                                         <div>
                                             <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 700, color: 'var(--text-main)' }}>{member.name}</h4>
-                                            {member.identifications?.familyName && (
-                                                <span style={{ fontSize: '0.75rem', color: 'var(--secondary)', fontWeight: 600, display: 'block', marginTop: '0.2rem' }}>
-                                                    👨‍👩‍👧‍👦 Familia {member.identifications.familyName} ({member.identifications.familyRole || 'Miembro'})
-                                                </span>
-                                            )}
                                         </div>
                                         {canEdit && (
                                             <button
@@ -296,12 +293,18 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
                                                 className="btn"
                                                 style={{ padding: '0.25rem 0.5rem', fontSize: '0.7rem' }}
                                                 onClick={async () => {
+                                                    const nextState = !member.identifications?.needsPrayer;
                                                     await updateMember(member.id, {
                                                         identifications: {
                                                             ...(member.identifications || {}),
-                                                            needsPrayer: !member.identifications?.needsPrayer
+                                                            needsPrayer: nextState
                                                         }
                                                     });
+                                                    if (nextState) {
+                                                        try {
+                                                            await notificationService.notifyPrayerRequestCreated(member.name);
+                                                        } catch (e) {}
+                                                    }
                                                 }}
                                             >
                                                 🙏 {member.identifications?.needsPrayer ? 'Quitar Oración' : 'Pedir Oración'}
@@ -479,6 +482,8 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
                                         const validSchedules = editStaffMeetingSchedules.filter(s => s.days.trim() || s.time.trim());
                                         if (validSchedules.length > 0) {
                                             updatedCustomFields.push(`__staffMeetingSchedules:${JSON.stringify(validSchedules)}`);
+                                            const meetingDetails = validSchedules.map(s => `${s.days} ${s.time}`.trim()).join(', ');
+                                            notificationService.notifyDiaconosMeetingCreated(meetingDetails);
                                         }
                                     }
                                     try {
@@ -542,17 +547,6 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
                             value={newMember.phone}
                             onChange={(e) => setNewMember({ ...newMember, phone: e.target.value })}
                             placeholder="Número de teléfono"
-                            style={{ width: '100%' }}
-                        />
-                    </div>
-                    <div>
-                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nombre de Familia (Opcional)</label>
-                        <input
-                            type="text"
-                            className="glass-input"
-                            value={newMember.familyName}
-                            onChange={(e) => setNewMember({ ...newMember, familyName: e.target.value })}
-                            placeholder="Ej: Pérez González"
                             style={{ width: '100%' }}
                         />
                     </div>

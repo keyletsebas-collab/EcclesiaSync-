@@ -55,7 +55,7 @@ const Auth = () => {
                     setError(msg);
                 }
             } else if (!isLogin && result.accountId) {
-                setSuccessMessage(`¡Cuenta creada con éxito! ID de tu Iglesia: ${result.accountId}`);
+                setSuccessMessage(`¡Cuenta creada con éxito! ID de tu Iglesia Adventista: ${result.accountId}`);
             }
         } catch (err) {
             setError(err.message || 'Error de conexión con el servidor');
@@ -198,24 +198,24 @@ const Auth = () => {
                                     style={{ textTransform: 'uppercase' }}
                                 />
                                 <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                                    Para unirte a una cuenta existente, introduce su ID. Déjalo en blanco para crear una nueva iglesia.
+                                    Para unirte a una cuenta existente, introduce su ID. Déjalo en blanco para crear una nueva iglesia adventista.
                                 </p>
                             </div>
 
                             {!accountId.trim() && (
                                 <div className="input-group animate-fade-in" style={{ marginBottom: '1.5rem' }}>
                                     <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.875rem', transition: 'color 0.2s' }}>
-                                        Nombre de la Nueva Iglesia *
+                                        Nombre de la Nueva Iglesia  *
                                     </label>
                                     <input
                                         className="glass-input"
                                         value={churchName}
                                         onChange={(e) => setChurchName(e.target.value)}
-                                        placeholder="Ej: Primera Iglesia Bautista"
+                                        placeholder="Ej: Iglesia Adventista"
                                         required={!accountId.trim()}
                                     />
                                     <p style={{ fontSize: '0.7rem', color: 'var(--text-muted)', marginTop: '0.4rem' }}>
-                                        Escribe el nombre de la iglesia que deseas registrar.
+                                        Escribe el nombre de la Iglesia que deseas registrar.
                                     </p>
                                 </div>
                             )}

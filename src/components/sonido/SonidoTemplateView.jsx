@@ -8,6 +8,7 @@ import Modal from '../Modal';
 import SonidoServicesView from './SonidoServicesView';
 import ProgramsView from '../shared/ProgramsView';
 import FinancesView from '../shared/FinancesView';
+import notificationService from '../../utils/NotificationService';
 
 const SonidoTemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
@@ -410,6 +411,8 @@ const SonidoTemplateView = ({ templateId, onDeleted }) => {
                                         const validSchedules = editStaffMeetingSchedules.filter(s => s.days.trim() || s.time.trim());
                                         if (validSchedules.length > 0) {
                                             updatedCustomFields.push(`__staffMeetingSchedules:${JSON.stringify(validSchedules)}`);
+                                            const meetingDetails = validSchedules.map(s => `${s.days} ${s.time}`.trim()).join(', ');
+                                            notificationService.notifySonidoMeetingCreated(meetingDetails);
                                         }
                                     }
                                     try {

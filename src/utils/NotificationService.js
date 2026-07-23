@@ -1,52 +1,166 @@
 import { LocalNotifications } from '@capacitor/local-notifications';
+import { supabase } from '../lib/supabase';
 
 /**
- * Service for managing local push notifications in VerbumSync.
- * Supports Android via @capacitor/local-notifications with Web fallback.
+ * Super Engine for Local Push Notifications in LuminaSync.
+ * Dual-layer notification engine:
+ * 1. Visual In-App Toast Banner & Audio Chime (Always visible on active screen).
+ * 2. Native Android OS System Tray / Notification Shade (Capacitor LocalNotifications).
+ * 3. Realtime Cross-Device Synchronization via Supabase Broadcast.
  */
 class NotificationService {
   constructor() {
-    this.isCapacitor = typeof window !== 'undefined' && !!window.Capacitor?.isNativePlatform();
     this.recentTriggers = new Map();
-    this.init();
+    this.isInitialized = false;
+    this.initPromise = this.init();
+    this.initRealtimeBroadcast();
+  }
+
+  get isCapacitor() {
+    if (typeof window === 'undefined') return false;
+    return !!(
+      window.Capacitor?.isNativePlatform?.() ||
+      window.Capacitor?.platform === 'android' ||
+      window.Capacitor?.platform === 'ios' ||
+      window.Capacitor?.isPluginAvailable?.('LocalNotifications')
+    );
   }
 
   async init() {
+    if (!this.isCapacitor) return;
     try {
-      if (this.isCapacitor) {
-        const status = await LocalNotifications.checkPermissions();
-        if (status.display !== 'granted') {
-          await LocalNotifications.requestPermissions();
-        }
-        await LocalNotifications.createChannel({
-          id: 'verbumsync_channel',
-          name: 'Notificaciones VerbumSync',
-          description: 'Notificaciones de cumpleaños, ensayos, salidas y campañas',
-          importance: 5,
-          visibility: 1,
-          vibration: true,
-          sound: 'default',
-          lights: true,
-          lightColor: '#6366F1'
-        });
+      // 1. Create high priority notification channel for Android Control Center
+      await LocalNotifications.createChannel({
+        id: 'lumina_notifications',
+        name: 'Notificaciones LuminaSync',
+        description: 'Alertas de cultos, reuniones, servicios, poesía, sonido y campañas',
+        importance: 5, // MAX High Priority for heads-up banners, sound & notification shade
+        visibility: 1, // Show on lock screen and notification shade
+        vibration: true,
+        sound: 'default',
+        lights: true,
+        lightColor: '#6366F1'
+      });
 
-        // Listen for foreground notification delivery
-        LocalNotifications.addListener('localNotificationReceived', (notification) => {
-          console.log('🔔 [Capacitor] Notification received in foreground:', notification);
-        });
-      } else if (typeof window !== 'undefined' && 'Notification' in window) {
-        if (Notification.permission === 'default') {
-          Notification.requestPermission().catch(() => {});
-        }
-      }
+      // 2. Register listeners for native notifications
+      LocalNotifications.addListener('localNotificationReceived', (notification) => {
+        console.log('🔔 [Capacitor Native] Notification delivered to Android System Shade:', notification);
+      });
+
+      LocalNotifications.addListener('localNotificationActionPerformed', (action) => {
+        console.log('👆 [Capacitor Native] Notification tapped in Android Control Center:', action);
+      });
+
+      this.isInitialized = true;
     } catch (e) {
-      console.warn('NotificationService init error:', e);
+      console.warn('⚠️ NotificationService init warning:', e);
+    }
+  }
+
+  initRealtimeBroadcast() {
+    try {
+      this.channel = supabase.channel('lumina_global_notifications', {
+        config: { broadcast: { self: false } }
+      });
+
+      this.channel
+        .on('broadcast', { event: 'notification_event' }, (payload) => {
+          console.log('📡 [Realtime Broadcast Received]:', payload);
+          const { id, title, body, extraData } = payload.payload || {};
+          if (title) {
+            this.sendLocalNotification(id, title, body, null, extraData, true);
+          }
+        })
+        .subscribe((status) => {
+          console.log('📡 Notification Realtime broadcast channel status:', status);
+        });
+    } catch (e) {
+      console.warn('Realtime broadcast init error:', e);
     }
   }
 
   /**
-   * Generates a collision-free 31-bit positive integer ID safe for Android NotificationManager.
+   * Displays an In-App Toast notification banner with sound on screen.
    */
+  showInAppToast(title, body) {
+    if (typeof document === 'undefined') return;
+
+    try {
+      const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(587.33, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(880, audioCtx.currentTime + 0.15);
+      gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.3);
+    } catch (e) {}
+
+    let container = document.getElementById('lumina-toast-container');
+    if (!container) {
+      container = document.createElement('div');
+      container.id = 'lumina-toast-container';
+      container.style.cssText = `
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        max-width: 380px;
+        width: calc(100vw - 40px);
+        pointer-events: none;
+      `;
+      document.body.appendChild(container);
+    }
+
+    const toast = document.createElement('div');
+    toast.style.cssText = `
+      background: rgba(30, 41, 59, 0.95);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(99, 102, 241, 0.4);
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5), 0 0 15px rgba(99, 102, 241, 0.3);
+      color: #f8fafc;
+      padding: 14px 16px;
+      border-radius: 14px;
+      pointer-events: auto;
+      transform: translateY(-20px) scale(0.95);
+      opacity: 0;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    `;
+
+    toast.innerHTML = `
+      <div style="background: rgba(99, 102, 241, 0.2); padding: 8px; border-radius: 10px; color: #818cf8; font-size: 1.2rem;">
+        🔔
+      </div>
+      <div style="flex: 1;">
+        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 3px; color: #ffffff;">${title}</div>
+        <div style="font-size: 0.8rem; color: #cbd5e1; line-height: 1.35;">${body}</div>
+      </div>
+    `;
+
+    container.appendChild(toast);
+
+    requestAnimationFrame(() => {
+      toast.style.transform = 'translateY(0) scale(1)';
+      toast.style.opacity = '1';
+    });
+
+    setTimeout(() => {
+      toast.style.transform = 'translateY(-10px) scale(0.95)';
+      toast.style.opacity = '0';
+      setTimeout(() => toast.remove(), 300);
+    }, 4500);
+  }
+
   generateNumericId(input) {
     if (typeof input === 'number' && Number.isInteger(input) && input > 0 && input <= 2147483647) {
       return input;
@@ -60,14 +174,10 @@ class NotificationService {
     return (hash % 2147483640) + 1;
   }
 
-  /**
-   * Parses YYYY-MM-DD string into a local Date without UTC shift.
-   */
   parseLocalDate(dateStr) {
     if (!dateStr) return null;
     if (dateStr instanceof Date) return dateStr;
 
-    // Handle "YYYY-MM-DD"
     const match = String(dateStr).trim().match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
     if (match) {
       const year = parseInt(match[1], 10);
@@ -84,82 +194,112 @@ class NotificationService {
     if (this.isCapacitor) {
       try {
         const status = await LocalNotifications.checkPermissions();
-        return status.display; // 'granted', 'denied', 'prompt'
+        return status.display;
       } catch (e) {
         return 'unsupported';
       }
     } else if (typeof window !== 'undefined' && 'Notification' in window) {
-      return Notification.permission; // 'granted', 'denied', 'default'
+      return Notification.permission;
     }
     return 'unsupported';
   }
 
-  async requestPermissions() {
-    if (this.isCapacitor) {
-      try {
+  async ensurePermissions() {
+    if (!this.isCapacitor) return false;
+    try {
+      const status = await LocalNotifications.checkPermissions();
+      if (status.display !== 'granted') {
         const req = await LocalNotifications.requestPermissions();
         return req.display === 'granted';
-      } catch (e) {
-        console.error('Error requesting Capacitor permissions:', e);
-        return false;
       }
-    } else if (typeof window !== 'undefined' && 'Notification' in window) {
-      try {
-        const res = await Notification.requestPermission();
-        return res === 'granted';
-      } catch (e) {
-        return false;
-      }
+      return true;
+    } catch (e) {
+      console.error('Error verifying permissions:', e);
+      return false;
     }
-    return false;
   }
 
-  async sendLocalNotification(id, title, body, scheduleDate = null, extraData = {}) {
+  async requestPermissions() {
+    return await this.ensurePermissions();
+  }
+
+  async sendLocalNotification(id, title, body, scheduleDate = null, extraData = {}, isRemoteBroadcast = false) {
+    // Ensure notification channel initialization completes before scheduling
+    await this.initPromise;
+
     const numericId = this.generateNumericId(id);
     const cooldownKey = `${numericId}-${title}`;
     const now = Date.now();
 
-    if (this.recentTriggers.has(cooldownKey) && (now - this.recentTriggers.get(cooldownKey) < 2000)) {
-      console.log(`⚠️ Notification throttle active for: ${cooldownKey}`);
+    if (this.recentTriggers.has(cooldownKey) && (now - this.recentTriggers.get(cooldownKey) < 1500)) {
       return;
     }
     this.recentTriggers.set(cooldownKey, now);
 
-    try {
-      if (this.isCapacitor) {
-        const notif = {
-          id: numericId,
-          title: title,
-          body: body,
-          channelId: 'verbumsync_channel',
-          smallIcon: 'ic_stat_notification',
-          extra: extraData
-        };
+    // 1. ALWAYS show In-App Toast banner for instant active session feedback
+    if (!scheduleDate || scheduleDate <= new Date()) {
+      this.showInAppToast(title, body);
+    }
 
-        if (scheduleDate && scheduleDate > new Date()) {
-          notif.schedule = { at: scheduleDate };
+    // 2. Broadcast to other connected devices via Supabase Realtime if instant notification and not remote
+    if (!isRemoteBroadcast && (!scheduleDate || scheduleDate <= new Date())) {
+      if (this.channel) {
+        this.channel.send({
+          type: 'broadcast',
+          event: 'notification_event',
+          payload: { id, title, body, extraData }
+        }).catch(err => console.warn('Broadcast send error:', err));
+      }
+    }
+
+    // 3. Native Android / Capacitor Local Notification
+    if (this.isCapacitor) {
+      const hasPermission = await this.ensurePermissions();
+      if (!hasPermission) {
+        console.warn('⚠️ Native notification skipped: Permission denied.');
+      } else {
+        try {
+          const triggerTime = (scheduleDate && scheduleDate > new Date())
+            ? scheduleDate
+            : new Date(Date.now() + 1000);
+
+          await LocalNotifications.schedule({
+            notifications: [
+              {
+                id: numericId,
+                title: title,
+                body: body,
+                channelId: 'lumina_notifications',
+                smallIcon: 'ic_stat_notification',
+                schedule: {
+                  at: triggerTime,
+                  allowWhileIdle: true
+                },
+                extra: extraData
+              }
+            ]
+          });
+          console.log(`📱 [Capacitor Native] Notification scheduled for ${triggerTime.toLocaleTimeString()} (ID: ${numericId}): "${title}"`);
+        } catch (err) {
+          console.error('❌ Error scheduling Capacitor local notification:', err);
         }
+      }
+    }
 
-        await LocalNotifications.schedule({
-          notifications: [notif]
-        });
-        console.log(`📱 [Capacitor] Notification scheduled/sent (ID: ${numericId}): "${title}"`);
-      } else if (typeof window !== 'undefined' && 'Notification' in window) {
+    // 4. Web Browser Native Notification
+    if (typeof window !== 'undefined' && 'Notification' in window) {
+      try {
         if (Notification.permission === 'granted') {
           if (!scheduleDate || scheduleDate <= new Date()) {
             new Notification(title, { body, icon: '/logo.png', data: extraData });
-            console.log(`💻 [Web] Notification displayed: "${title}"`);
           }
         }
+      } catch (err) {
+        console.error('❌ Error showing Web Notification:', err);
       }
-    } catch (err) {
-      console.error('❌ Error sending local notification:', err);
     }
   }
 
-  /**
-   * Syncs all upcoming events and pre-schedules them natively inside the Android OS Scheduler.
-   */
   async syncAllLocalNotifications(currentUser, services = [], members = [], templates = [], users = []) {
     if (!this.isCapacitor) {
       console.log('ℹ️ Local notification sync skipped: not running on Capacitor native platform.');
@@ -167,17 +307,12 @@ class NotificationService {
     }
 
     try {
-      // 1. Check permissions
-      const status = await LocalNotifications.checkPermissions();
-      if (status.display !== 'granted') {
-        const req = await LocalNotifications.requestPermissions();
-        if (req.display !== 'granted') {
-          console.warn('⚠️ Notifications permission denied by user.');
-          return { scheduledCount: 0, status: 'permission_denied' };
-        }
+      const hasPermission = await this.ensurePermissions();
+      if (!hasPermission) {
+        console.warn('⚠️ Notifications permission denied by user.');
+        return { scheduledCount: 0, status: 'permission_denied' };
       }
 
-      // 2. Clear pending notifications to avoid duplicates
       try {
         const pending = await LocalNotifications.getPending();
         if (pending && pending.notifications && pending.notifications.length > 0) {
@@ -198,18 +333,26 @@ class NotificationService {
           id: numericId,
           title: title,
           body: body,
-          schedule: { at: scheduleDate },
-          channelId: 'verbumsync_channel',
+          schedule: { at: scheduleDate, allowWhileIdle: true },
+          channelId: 'lumina_notifications',
           smallIcon: 'ic_stat_notification',
           extra: extraData
         });
       };
 
-      // --- A. SCHEDULE BIRTHDAYS (Within next 30 days) ---
+      // --- A. SCHEDULE BIRTHDAYS (1 week before & same day) ---
       const currentYear = today.getFullYear();
       const people = [
-        ...users.map(u => ({ name: u.username || u.name, birthday: u.birthday, id: u.uid })),
-        ...members.map(m => ({ name: m.name, birthday: m.birthday, id: m.id }))
+        ...users.map(u => ({
+          name: u.memberships?.[0]?.fullName || u.username || u.name,
+          birthday: u.birthday,
+          id: u.uid
+        })),
+        ...members.map(m => ({
+          name: m.name,
+          birthday: m.birthday || m.identifications?.birthday,
+          id: m.id
+        }))
       ].filter(p => p.birthday && p.name);
 
       const uniquePeople = Array.from(new Map(people.map(p => [p.name.toLowerCase().trim(), p])).values());
@@ -224,6 +367,7 @@ class NotificationService {
         }
 
         const bdayMinus7 = new Date(bdayThisYear.getTime() - 7 * 24 * 60 * 60 * 1000);
+        bdayMinus7.setHours(9, 0, 0, 0);
         const baseKey = `bday_${person.name}`;
 
         if (bdayMinus7 > today) {
@@ -248,7 +392,7 @@ class NotificationService {
         }
       }
 
-      // --- B. SCHEDULE SERVICES & ASSIGNMENTS (Next 30 days) ---
+      // --- B. SCHEDULE SERVICES, MEETINGS & CAMPAIGNS (Next 30 days) ---
       const activeUserFullName = currentUser?.username?.toLowerCase().trim() || '';
       const userMemberships = currentUser?.memberships?.map(m => m.fullName?.toLowerCase().trim()).filter(Boolean) || [];
 
@@ -298,10 +442,9 @@ class NotificationService {
 
         const lowerType = serviceType.toLowerCase();
         const lowerProgram = program.toLowerCase();
-        const tNameLower = (templateName || '').toLowerCase();
         const isCampaign = lowerType.includes('campaña') || lowerType.includes('campana') || lowerProgram.includes('campaña') || lowerProgram.includes('campana');
-        const isRehearsal = lowerType.includes('ensayo') || lowerType.includes('ensayos') || lowerType.includes('practica') || lowerType.includes('práctica') || lowerType.includes('practicas') || lowerType.includes('prácticas') || lowerType.includes('ensayar') || lowerProgram.includes('ensayo') || lowerProgram.includes('ensayos') || lowerProgram.includes('practica') || lowerProgram.includes('práctica') || lowerProgram.includes('practicas') || lowerProgram.includes('prácticas') || lowerProgram.includes('ensayar') || tNameLower.includes('ensayo') || tNameLower.includes('ensayos') || tNameLower.includes('practica') || tNameLower.includes('práctica');
-        const isOuting = !isRehearsal && (lowerType.includes('salida') || lowerType.includes('salidas') || lowerProgram.includes('salida') || lowerProgram.includes('salidas') || tNameLower.includes('salida') || tNameLower.includes('salidas'));
+        const isRehearsal = lowerType.includes('ensayo') || lowerType.includes('ensayos') || lowerType.includes('practica') || lowerType.includes('práctica');
+        const isOuting = !isRehearsal && (lowerType.includes('salida') || lowerType.includes('salidas'));
 
         const serviceKey = `srv_${service.id || Math.random()}`;
 
@@ -312,20 +455,19 @@ class NotificationService {
           title = `📋 Tu Servicio: ${serviceType}`;
           body = `Tienes servicio asignado en "${templateName}". Tarea: ${program || 'Servicio General'}.`;
         } else if (isCampaign) {
-          title = `🔥 ¡Campaña de la Iglesia!`;
-          body = `Campaña "${serviceType}" programada. Detalles: ${program || 'No te lo pierdas.'}`;
+          title = `🔥 ¡Campaña Congregacional!`;
+          body = `Campaña "${serviceType}" en "${templateName}". Detalles: ${program || '¡Participa con nosotros!'}`;
         } else if (isRehearsal) {
-          title = `📢 Ensayo General`;
-          body = `Ensayo programado. Detalles: ${program || 'Participa con nosotros.'}`;
+          title = `📢 Ensayo Programado`;
+          body = `Ensayo "${serviceType}" en "${templateName}". ${program ? `Detalles: ${program}` : ''}`;
         } else if (isOuting) {
-          title = `📢 Salida General`;
-          body = `Salida programada. Detalles: ${program || 'Participa con nosotros.'}`;
+          title = `🚌 Salida Programada`;
+          body = `Salida "${serviceType}" en "${templateName}". ${program ? `Detalles: ${program}` : ''}`;
         } else {
-          title = `📅 Servicio de la Iglesia`;
-          body = `Servicio de "${templateName}" programado. Tarea: ${program || serviceType}`;
+          title = `📅 Servicio Programado`;
+          body = `Servicio "${templateName}" (${serviceType}). Tarea: ${program || 'Servicio Congregacional'}`;
         }
 
-        // Schedule 1 day before at 9:00 AM
         const oneDayBefore = new Date(parsedSrvDate.getTime() - 24 * 60 * 60 * 1000);
         oneDayBefore.setHours(9, 0, 0, 0);
         if (oneDayBefore > today) {
@@ -338,7 +480,6 @@ class NotificationService {
           );
         }
 
-        // Schedule same day at 9:00 AM
         const sameDayMorning = new Date(parsedSrvDate);
         sameDayMorning.setHours(9, 0, 0, 0);
         if (sameDayMorning > today) {
@@ -367,139 +508,190 @@ class NotificationService {
     }
   }
 
-  scheduleBirthdayNotifications(users = [], members = []) {
-    console.log('ℹ️ scheduleBirthdayNotifications called: redirected automatically to syncAllLocalNotifications');
-  }
-
-  async notifyRehearsalOrOutingCreated(title, details, isOuting = false) {
-    let notifTitle = '';
-    let notifBody = '';
-    let notifType = '';
-
-    if (isOuting) {
-      notifTitle = `🚌 ¡Nueva Salida Anunciada!`;
-      notifBody = `📍 ${title ? `${title}. ` : ''}${details}`;
-      notifType = 'outing_announced';
-    } else {
-      notifTitle = `🎼 ¡Nuevo Ensayo Anunciado!`;
-      notifBody = `🎵 ${title ? `${title}. ` : ''}${details}`;
-      notifType = 'rehearsal_announced';
-    }
-
-    await this.sendLocalNotification(
-      `announcement_${Date.now()}_${Math.random()}`,
-      notifTitle,
-      notifBody,
-      null,
-      { type: notifType }
-    );
-  }
-
-  async notifyCampaignOrAssignment({ serviceDate, assignedMembers = [], serviceType = '', program = '', isUserAssigned = false, isCampaign = false }) {
-    const title = isCampaign
-      ? `🔥 ¡Nueva Campaña Programada!`
-      : isUserAssigned
-        ? `📋 Día Asignado en el Servicio`
-        : `📅 Nuevo Servicio Programado`;
-
-    const membersText = assignedMembers.length > 0
-      ? assignedMembers.map(m => m.name).join(', ')
-      : 'Todos los miembros';
-
-    const notifBody = isCampaign
-      ? `Se ha anunciado la campaña "${serviceType}" para la fecha: ${serviceDate}. ${program ? `Detalles: ${program}` : ''}`
-      : isUserAssigned
-        ? `Tienes servicio asignado para el ${serviceDate}. Tarea / Programa: ${program || serviceType || 'Servicio Congregacional'}.`
-        : `Servicio programado para el ${serviceDate}. Asignados: ${membersText}.`;
-
-    await this.sendLocalNotification(
-      `campaign_${Date.now()}_${Math.random()}`,
-      title,
-      notifBody,
-      null,
-      { type: 'service_campaign_assigned' }
-    );
-  }
-
-  async notifyPoetryCreated(serviceType, serviceDate, programRaw) {
-    let notes = '';
-    try {
-      const parsed = JSON.parse(programRaw);
-      if (parsed && typeof parsed === 'object') {
-        notes = parsed.notes || '';
-      }
-    } catch (e) {
-      notes = programRaw;
-    }
-
-    await this.sendLocalNotification(
-      `poetry_${Date.now()}_${Math.random()}`,
-      `📖 Nuevo Programa de Poesía`,
-      `Se ha programado "${serviceType}" para el ${serviceDate}. Detalles: ${notes || 'Sin detalles.'}`,
-      null,
-      { type: 'poetry_created' }
-    );
-  }
-
+  // --- 🔄 METODOS DE COMPATIBILIDAD Y DIFUSION REALTIME ---
   async notifyProgramCreated(title, content) {
     await this.sendLocalNotification(
       `prog_${Date.now()}_${Math.random()}`,
-      `📝 Nuevo Programa Anunciado`,
-      `Título: ${title}. Contenido: ${content || 'Ver detalles en la app.'}`,
+      `📋 Nuevo Programa Registrado`,
+      `Programa: "${title}". ${content ? `Detalles: ${content}` : ''}`,
       null,
       { type: 'program_created' }
     );
   }
 
-  async notifyKickedFromChurch(churchId) {
-    await this.sendLocalNotification(
-      `kicked_church_${Date.now()}`,
-      `⚠️ Acceso Revocado`,
-      `Has sido removido de la congregación con código: ${churchId}.`,
-      null,
-      { type: 'kicked_church', churchId }
-    );
-  }
-
-  async notifyRoleChanged(churchId, newRole) {
-    const roleNames = {
-      admin: 'Administrador',
-      editor: 'Editor',
-      viewer: 'Lector'
-    };
-    const roleName = roleNames[newRole] || newRole;
-    await this.sendLocalNotification(
-      `role_${Date.now()}`,
-      `🔑 Actualización de Rol`,
-      `Tu rol en la congregación "${churchId}" ha sido cambiado a: ${roleName}.`,
-      null,
-      { type: 'role_changed', churchId, newRole }
-    );
-  }
-
-  async notifyJoinedChurch(churchId, role) {
-    const roleNames = {
-      admin: 'Administrador',
-      editor: 'Editor',
-      viewer: 'Lector'
-    };
-    const roleName = roleNames[role] || role;
-    await this.sendLocalNotification(
-      `joined_${Date.now()}`,
-      `⛪ Nueva Iglesia Vinculada`,
-      `Te has unido exitosamente a la iglesia "${churchId}" con el rol de ${roleName}.`,
-      null,
-      { type: 'joined_church', churchId, role }
-    );
-  }
-
   async notifyKickedFromTemplate(templateName) {
     await this.sendLocalNotification(
-      `kicked_tpl_${Date.now()}`,
-      `⚠️ Salida de Plantilla`,
-      `Has sido removido de la lista de miembros de la plantilla "${templateName}".`,
+      `kick_${Date.now()}_${Math.random()}`,
+      `⚠️ Cambio de Acceso en Plantilla`,
+      `Ya no formas parte de la plantilla "${templateName}".`,
       null,
-      { type: 'kicked_template', templateName }
+      { type: 'kicked_from_template' }
+    );
+  }
+
+  async notifyRehearsalOrOutingCreated(title, details, isOuting = false) {
+    await this.sendLocalNotification(
+      `reh_out_${Date.now()}_${Math.random()}`,
+      isOuting ? `🚌 Nueva Salida Programada` : `🎼 Nuevo Ensayo Programado`,
+      `"${title}". ${details ? `Detalles: ${details}` : ''}`,
+      null,
+      { type: isOuting ? 'outing_created' : 'rehearsal_created' }
+    );
+  }
+
+  async notifyCampaignOrAssignment({ serviceDate, assignedMembers = [], serviceType = '', program = '', isCampaign = false }) {
+    let title = isCampaign ? `🔥 ¡Nueva Campaña Programada!` : `📋 Nuevo Servicio Asignado`;
+    let body = `${serviceType ? `Tipo: "${serviceType}". ` : ''}${serviceDate ? `Fecha: ${serviceDate}. ` : ''}${program ? `Programa: ${program}` : ''}`;
+
+    await this.sendLocalNotification(
+      `camp_assign_${Date.now()}_${Math.random()}`,
+      title,
+      body,
+      null,
+      { type: isCampaign ? 'campaign_created' : 'service_assigned' }
+    );
+  }
+
+  // --- 🎭 NOTIFICACIONES DE POESÍA ---
+  async notifyPoetryAdded(title, author) {
+    await this.sendLocalNotification(
+      `poem_${Date.now()}_${Math.random()}`,
+      `📖 Nueva Poesía Registrada`,
+      `Se ha añadido "${title}" (Autor/Recitador: ${author || 'Anónimo'}) a la biblioteca de poesía.`,
+      null,
+      { type: 'poetry_added' }
+    );
+  }
+
+  async notifyPoetryOutingCreated(title, details, date) {
+    await this.sendLocalNotification(
+      `poetry_outing_${Date.now()}_${Math.random()}`,
+      `🚌 Nueva Salida de Poesía`,
+      `Salida: "${title}". ${date ? `Fecha: ${date}. ` : ''}${details ? `Detalles: ${details}` : ''}`,
+      null,
+      { type: 'poetry_outing_created' }
+    );
+  }
+
+  async notifyPoetryProgramCreated(title, content) {
+    await this.sendLocalNotification(
+      `poetry_prog_${Date.now()}_${Math.random()}`,
+      `📋 Nuevo Programa de Poesía`,
+      `Programa: "${title}". Ver detalles en la app.`,
+      null,
+      { type: 'poetry_program_created' }
+    );
+  }
+
+  async notifyPoetryRehearsalCreated(details, date) {
+    await this.sendLocalNotification(
+      `poetry_reh_${Date.now()}_${Math.random()}`,
+      `🎼 Nuevo Ensayo / Reunión de Poesía`,
+      `Ensayo: "${details}". ${date ? `Fecha: ${date}` : ''}`,
+      null,
+      { type: 'poetry_rehearsal_created' }
+    );
+  }
+
+  async notifyPoetryCampaignCreated(title, date, details) {
+    await this.sendLocalNotification(
+      `poetry_camp_${Date.now()}_${Math.random()}`,
+      `🔥 Nueva Campaña de Poesía`,
+      `Campaña: "${title}". Fecha: ${date}. ${details ? `Detalles: ${details}` : ''}`,
+      null,
+      { type: 'poetry_campaign_created' }
+    );
+  }
+
+  // --- ⛪ NOTIFICACIONES DE DIÁCONOS ---
+  async notifyPrayerRequestCreated(memberName) {
+    await this.sendLocalNotification(
+      `prayer_${Date.now()}_${Math.random()}`,
+      `🙏 Nueva Petición de Oración`,
+      `Se solicita oración por ${memberName}. ¡Oremos juntos!`,
+      null,
+      { type: 'prayer_request_created' }
+    );
+  }
+
+  async notifyDiaconosServiceCreated(memberName, serviceType, serviceDate) {
+    await this.sendLocalNotification(
+      `diaconos_srv_${Date.now()}_${Math.random()}`,
+      `🗓️ Cronograma de Cultos`,
+      `Culto asignado a ${memberName}. Función: "${serviceType}". Fecha: ${serviceDate}.`,
+      null,
+      { type: 'diaconos_service_created' }
+    );
+  }
+
+  async notifyDiaconosCampaignCreated(title, date, details) {
+    await this.sendLocalNotification(
+      `diaconos_camp_${Date.now()}_${Math.random()}`,
+      `🔥 Nueva Campaña de Diaconado`,
+      `Campaña: "${title}". Fecha: ${date}. ${details ? `Detalles: ${details}` : ''}`,
+      null,
+      { type: 'diaconos_campaign_created' }
+    );
+  }
+
+  async notifyDiaconosProgramCreated(title, content) {
+    await this.sendLocalNotification(
+      `diaconos_prog_${Date.now()}_${Math.random()}`,
+      `📋 Nuevo Programa de Diáconos`,
+      `Programa: "${title}". Ver detalles en la app.`,
+      null,
+      { type: 'diaconos_program_created' }
+    );
+  }
+
+  async notifyDiaconosMeetingCreated(details, date) {
+    await this.sendLocalNotification(
+      `diaconos_meet_${Date.now()}_${Math.random()}`,
+      `🤝 Nueva Reunión de Diáconos`,
+      `Reunión de personal: "${details}". ${date ? `Fecha: ${date}` : ''}`,
+      null,
+      { type: 'diaconos_meeting_created' }
+    );
+  }
+
+  // --- 🔊 NOTIFICACIONES DE SONIDO ---
+  async notifySonidoTurnoCreated(memberName, soundRole, date) {
+    await this.sendLocalNotification(
+      `sonido_turno_${Date.now()}_${Math.random()}`,
+      `🎛️ Nuevo Turno de Sonido`,
+      `Turno asignado a ${memberName} en consola (${soundRole || 'Audio'}). Fecha: ${date}.`,
+      null,
+      { type: 'sonido_turno_created' }
+    );
+  }
+
+  async notifySonidoCampaignCreated(title, date, details) {
+    await this.sendLocalNotification(
+      `sonido_camp_${Date.now()}_${Math.random()}`,
+      `🔥 Nueva Campaña de Sonido`,
+      `Campaña: "${title}". Fecha: ${date}. ${details ? `Detalles: ${details}` : ''}`,
+      null,
+      { type: 'sonido_campaign_created' }
+    );
+  }
+
+  async notifySonidoProgramCreated(title, content) {
+    await this.sendLocalNotification(
+      `sonido_prog_${Date.now()}_${Math.random()}`,
+      `📋 Nuevo Programa de Equipo de Sonido`,
+      `Programa: "${title}". Ver detalles en la app.`,
+      null,
+      { type: 'sonido_program_created' }
+    );
+  }
+
+  async notifySonidoMeetingCreated(details, date) {
+    await this.sendLocalNotification(
+      `sonido_meet_${Date.now()}_${Math.random()}`,
+      `🤝 Nueva Reunión de Equipo de Sonido`,
+      `Reunión técnica: "${details}". ${date ? `Fecha: ${date}` : ''}`,
+      null,
+      { type: 'sonido_meeting_created' }
     );
   }
 }

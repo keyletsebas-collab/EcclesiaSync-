@@ -8,7 +8,7 @@ import { supabase } from '../lib/supabase';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose, isCollapsed, onToggleCollapse }) => {
     const { templates } = useStorage();
-    const { currentUser, activeAccountId, setActiveAccountId, canEdit, users, updateUserRole, deleteUser } = useAuth();
+    const { currentUser, activeAccountId, setActiveAccountId, canEdit, canCreateTemplate, users, updateUserRole, deleteUser } = useAuth();
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isIdCopied, setIsIdCopied] = useState(false);
@@ -155,7 +155,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                     </div>
                 </div>
 
-                {canEdit && (
+                {canCreateTemplate && (
                     <button
                         onClick={onOpenNewTemplate}
                         className="btn btn-primary"
