@@ -144,7 +144,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
 
                 {/* Account Switcher */}
                 <div style={{ marginBottom: '2rem' }}>
-                    <label style={{ fontSize: '0.65rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem', display: 'block' }}>
+                    <label style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--text-muted)', fontWeight: 700, marginBottom: '0.5rem', display: 'block', letterSpacing: '0.05em' }}>
                         {t('currentAccount')}
                     </label>
                     <div style={{ position: 'relative', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -152,7 +152,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             value={activeAccountId} 
                             onChange={(e) => setActiveAccountId(e.target.value)}
                             className="glass-input"
-                            style={{ flex: 1, fontSize: '0.8rem', padding: '0.5rem' }}
+                            style={{ flex: 1, fontSize: '0.875rem', padding: '0.6rem 0.75rem' }}
                         >
                             {currentUser?.memberships?.map(m => (
                                 <option key={m.id} value={m.id}>
@@ -165,13 +165,13 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             className="btn"
                             title={t('copyId') || 'Copiar ID'}
                             style={{ 
-                                padding: '0.5rem', 
+                                padding: '0.6rem', 
                                 background: 'var(--bg-glass)', 
                                 border: '1px solid var(--border)',
                                 color: isIdCopied ? 'var(--primary)' : 'var(--text-muted)'
                             }}
                         >
-                            {isIdCopied ? <Check size={14} /> : <Copy size={14} />}
+                            {isIdCopied ? <Check size={16} /> : <Copy size={16} />}
                         </button>
                     </div>
                 </div>
@@ -184,18 +184,18 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             width: '100%',
                             justifyContent: 'center',
                             marginBottom: '2rem',
-                            fontSize: '0.875rem',
+                            fontSize: '0.95rem',
                             padding: '0.875rem'
                         }}
                     >
-                        <FolderPlus size={18} />
+                        <FolderPlus size={20} />
                         {t('newTemplate')}
                     </button>
                 )}
 
                 <div style={{ flex: 1, overflowY: 'auto', margin: '0 -0.5rem', padding: '0 0.5rem' }}>
                     <h3 style={{
-                        fontSize: '0.75rem',
+                        fontSize: '0.8rem',
                         textTransform: 'uppercase',
                         letterSpacing: '0.1em',
                         color: 'var(--text-muted)',
@@ -205,7 +205,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                         {t('yourTemplates')}
                     </h3>
 
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
                         {userTemplates.map(template => (
                             <button
                                 key={template.id}
@@ -223,6 +223,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                                     transition: 'all 0.2s',
                                     width: '100%',
                                     textAlign: 'left',
+                                    fontSize: '0.95rem',
                                     fontWeight: activeTemplate === template.id ? 600 : 400
                                 }}
                                 className="sidebar-item"
@@ -231,12 +232,12 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                                 <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {template.name}
                                 </span>
-                                {activeTemplate === template.id && <ChevronRight size={14} />}
+                                {activeTemplate === template.id && <ChevronRight size={16} />}
                             </button>
                         ))}
 
                         {userTemplates.length === 0 && (
-                            <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', padding: '1rem', textAlign: 'center', fontStyle: 'italic' }}>
+                            <p style={{ fontSize: '0.875rem', color: 'var(--text-muted)', padding: '1rem', textAlign: 'center', fontStyle: 'italic' }}>
                                 {t('noTemplatesYet')}
                             </p>
                         )}
@@ -258,7 +259,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             cursor: 'pointer',
                             transition: 'all 0.2s',
                             width: '100%',
-                            fontSize: '0.875rem',
+                            fontSize: '0.95rem',
                             fontWeight: 500
                         }}
                         className="sidebar-item"
@@ -281,7 +282,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                                 cursor: 'pointer',
                                 transition: 'all 0.2s',
                                 width: '100%',
-                                fontSize: '0.875rem',
+                                fontSize: '0.95rem',
                                 fontWeight: 500
                             }}
                             className="sidebar-item"
@@ -304,7 +305,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             cursor: 'pointer',
                             transition: 'all 0.2s',
                             width: '100%',
-                            fontSize: '0.875rem',
+                            fontSize: '0.95rem',
                             fontWeight: 500
                         }}
                     >

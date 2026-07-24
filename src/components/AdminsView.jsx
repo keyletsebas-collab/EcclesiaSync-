@@ -301,16 +301,16 @@ const AdminsView = () => {
                 alignItems: 'center',
                 marginBottom: '2rem',
                 background: 'rgba(15, 23, 42, 0.3)',
-                padding: '1.5rem',
+                padding: '2rem',
                 borderRadius: 'var(--radius)',
                 border: '1px solid var(--border)'
             }}>
                 <div>
-                    <h1 style={{ margin: 0, fontSize: '2rem', display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-                        <Shield size={32} color="var(--primary)" />
+                    <h1 style={{ margin: 0, fontSize: '2.5rem', display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        <Shield size={38} color="var(--primary)" />
                         Gestión de Administradores e Invitados
                     </h1>
-                    <p style={{ color: 'var(--text-muted)', marginTop: '0.5rem' }}>
+                    <p style={{ color: 'var(--text-muted)', marginTop: '0.75rem', fontSize: '1.15rem' }}>
                         Administra los roles, permisos temporales y cuentas de usuario para la iglesia activa: <strong style={{ color: 'var(--primary)' }}>{targetAccountId}</strong>
                     </p>
                 </div>
@@ -318,7 +318,7 @@ const AdminsView = () => {
 
             {successMessage && (
                 <div style={{
-                    padding: '1rem',
+                    padding: '1.25rem 1.5rem',
                     background: 'rgba(16, 185, 129, 0.15)',
                     border: '1px solid rgba(16, 185, 129, 0.4)',
                     color: '#34d399',
@@ -326,44 +326,44 @@ const AdminsView = () => {
                     marginBottom: '1.5rem',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    fontSize: '0.9rem',
+                    gap: '0.75rem',
+                    fontSize: '1.05rem',
                     fontWeight: 500
                 }}>
-                    <Check size={18} />
+                    <Check size={22} />
                     {successMessage}
                 </div>
             )}
 
             {isSuperAdmin && (
-                <div className="glass-panel animate-fade-in" style={{ padding: '1.5rem', marginBottom: '1.5rem' }}>
+                <div className="glass-panel animate-fade-in" style={{ padding: '2rem', marginBottom: '2rem' }}>
                     <h3 style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '0.5rem',
-                        marginBottom: '1.25rem',
-                        fontSize: '1.1rem',
-                        fontWeight: 600
+                        gap: '0.75rem',
+                        marginBottom: '1.5rem',
+                        fontSize: '1.35rem',
+                        fontWeight: 700
                     }}>
                         ⛪ Gestión Global de Iglesias Adventistas (Super Admin)
                     </h3>
                     
                     {loadingChurches ? (
-                        <div style={{ color: 'var(--text-muted)' }}>Cargando iglesias adventistas...</div>
+                        <div style={{ color: 'var(--text-muted)', fontSize: '1.1rem' }}>Cargando iglesias adventistas...</div>
                     ) : (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '0.75rem' }}>
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: '1rem' }}>
                             {churches.map(c => {
                                 const isEditing = editingChurchCode === c.code;
                                 const isSelected = selectedChurchCode === c.code;
                                 return (
                                     <div key={c.code} style={{
-                                        padding: '1rem',
+                                        padding: '1.25rem 1.5rem',
                                         background: isSelected ? 'rgba(99, 102, 241, 0.15)' : 'rgba(15, 23, 42, 0.4)',
                                         border: isSelected ? '1px solid var(--primary)' : '1px solid var(--border)',
-                                        borderRadius: '12px',
+                                        borderRadius: '14px',
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '0.5rem'
+                                        gap: '0.75rem'
                                     }}>
                                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                                             {isEditing ? (
@@ -408,25 +408,25 @@ const AdminsView = () => {
                                                     } catch (err) {
                                                         console.error(err);
                                                     }
-                                                }} style={{ display: 'flex', gap: '0.5rem', flex: 1 }}>
+                                                }} style={{ display: 'flex', gap: '0.75rem', flex: 1 }}>
                                                     <input
                                                         type="text"
                                                         className="glass-input"
                                                         value={editChurchName}
                                                         onChange={(e) => setEditChurchName(e.target.value)}
-                                                        style={{ flex: 1, padding: '0.25rem 0.5rem', fontSize: '0.875rem' }}
+                                                        style={{ flex: 1, padding: '0.5rem 0.85rem', fontSize: '1rem' }}
                                                     />
-                                                    <button type="submit" className="btn btn-primary" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem' }}>Guardar</button>
-                                                    <button type="button" onClick={() => setEditingChurchCode(null)} className="btn" style={{ padding: '0.25rem 0.75rem', fontSize: '0.75rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}>Cancelar</button>
+                                                    <button type="submit" className="btn btn-primary" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem' }}>Guardar</button>
+                                                    <button type="button" onClick={() => setEditingChurchCode(null)} className="btn" style={{ padding: '0.5rem 1rem', fontSize: '0.9rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}>Cancelar</button>
                                                 </form>
                                             ) : (
                                                 <div>
-                                                    <span style={{ fontWeight: 700, fontSize: '0.95rem' }}>{c.name}</span>
-                                                    <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginLeft: '0.5rem' }}>({c.code})</span>
+                                                    <span style={{ fontWeight: 700, fontSize: '1.15rem' }}>{c.name}</span>
+                                                    <span style={{ fontSize: '0.9rem', color: 'var(--text-muted)', marginLeft: '0.65rem' }}>({c.code})</span>
                                                 </div>
                                             )}
 
-                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', alignItems: 'center' }}>
                                                 {!isEditing && (
                                                     <button
                                                         onClick={() => {
@@ -434,7 +434,7 @@ const AdminsView = () => {
                                                             setEditChurchName(c.name);
                                                         }}
                                                         className="btn btn-sm"
-                                                        style={{ background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
+                                                        style={{ background: 'var(--bg-glass)', border: '1px solid var(--border)', fontSize: '0.9rem', padding: '0.5rem 0.9rem' }}
                                                     >
                                                         ✏️ Editar Nombre
                                                     </button>
@@ -442,7 +442,7 @@ const AdminsView = () => {
                                                 <button
                                                     onClick={() => setSelectedChurchCode(c.code)}
                                                     className={`btn btn-sm ${isSelected ? 'btn-primary' : ''}`}
-                                                    style={{ background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)' }}
+                                                    style={{ background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)', fontSize: '0.9rem', padding: '0.5rem 0.9rem' }}
                                                 >
                                                     🔍 Ver Usuarios
                                                 </button>
@@ -452,7 +452,9 @@ const AdminsView = () => {
                                                     style={{ 
                                                         background: 'rgba(239, 68, 68, 0.1)', 
                                                         border: '1px solid rgba(239, 68, 68, 0.2)',
-                                                        color: '#f87171' 
+                                                        color: '#f87171',
+                                                        fontSize: '0.9rem',
+                                                        padding: '0.5rem 0.9rem'
                                                     }}
                                                     onMouseOver={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.2)'}
                                                     onMouseOut={(e) => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)'}
@@ -461,7 +463,7 @@ const AdminsView = () => {
                                                 </button>
                                             </div>
                                         </div>
-                                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
                                             Creador: {c.creatorUsername} ({c.creatorUid}) | Registrada el: {new Date(c.createdAt).toLocaleDateString()}
                                         </div>
                                     </div>
@@ -472,20 +474,20 @@ const AdminsView = () => {
                 </div>
             )}
 
-            <div className="glass-panel" style={{ padding: '1.5rem' }}>
+            <div className="glass-panel" style={{ padding: '2rem' }}>
                 <h3 style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '0.5rem',
-                    marginBottom: '1.5rem',
-                    fontSize: '1.1rem',
-                    fontWeight: 600
+                    gap: '0.75rem',
+                    marginBottom: '1.75rem',
+                    fontSize: '1.35rem',
+                    fontWeight: 700
                 }}>
-                    <Users size={20} color="var(--primary)" />
+                    <Users size={24} color="var(--primary)" />
                     Usuarios Registrados en esta Iglesia ({activeChurchUsers.length})
                 </h3>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     {activeChurchUsers.map(user => {
                         handleInitEditState(user);
                         const editState = editStates[user.uid] || { role: 'remove', durationType: 'indefinite', expiresAt: '' };
@@ -493,28 +495,28 @@ const AdminsView = () => {
 
                         return (
                             <div key={user.uid} style={{
-                                padding: '1.25rem',
+                                padding: '1.5rem',
                                 background: 'rgba(15, 23, 42, 0.4)',
-                                borderRadius: '12px',
+                                borderRadius: '16px',
                                 border: '1px solid var(--border)',
                                 display: 'flex',
                                 flexDirection: 'column',
-                                gap: '1rem'
+                                gap: '1.25rem'
                             }}>
-                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.25rem' }}>
                                     
                                     {/* User General Info */}
-                                    <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                            <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-main)' }}>{user.username}</span>
+                                    <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                                            <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-main)' }}>{user.username}</span>
                                             {isThisUserCurrentUser && (
                                                 <span style={{
                                                     background: 'rgba(99, 102, 241, 0.15)',
                                                     border: '1px solid rgba(99, 102, 241, 0.3)',
                                                     color: 'var(--primary)',
-                                                    padding: '0.15rem 0.4rem',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.65rem',
+                                                    padding: '0.25rem 0.6rem',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.8rem',
                                                     fontWeight: 600
                                                 }}>
                                                     Tú
@@ -524,15 +526,15 @@ const AdminsView = () => {
                                                 <span style={{
                                                     background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)',
                                                     color: 'white',
-                                                    padding: '0.15rem 0.5rem',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.65rem',
+                                                    padding: '0.25rem 0.75rem',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.8rem',
                                                     fontWeight: 700,
                                                     display: 'inline-flex',
                                                     alignItems: 'center',
-                                                    gap: '0.25rem'
+                                                    gap: '0.35rem'
                                                 }}>
-                                                    <Crown size={10} />
+                                                    <Crown size={12} />
                                                     MASTER GLOBAL
                                                 </span>
                                             )}
@@ -541,9 +543,9 @@ const AdminsView = () => {
                                                     background: 'rgba(239, 68, 68, 0.15)',
                                                     border: '1px solid rgba(239, 68, 68, 0.3)',
                                                     color: '#fca5a5',
-                                                    padding: '0.15rem 0.4rem',
-                                                    borderRadius: '4px',
-                                                    fontSize: '0.65rem',
+                                                    padding: '0.25rem 0.6rem',
+                                                    borderRadius: '6px',
+                                                    fontSize: '0.8rem',
                                                     fontWeight: 600
                                                 }}>
                                                     Bloqueado
@@ -551,57 +553,57 @@ const AdminsView = () => {
                                             )}
                                         </div>
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', fontSize: '0.95rem', color: 'var(--text-muted)' }}>
                                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
-                                                <Key size={12} />
+                                                <Key size={14} />
                                                 <span>Clave:</span>
-                                                <span style={{ fontFamily: 'monospace', color: 'var(--accent)', fontWeight: 600, fontSize: '0.85rem' }}>
+                                                <span style={{ fontFamily: 'monospace', color: 'var(--accent)', fontWeight: 600, fontSize: '1rem' }}>
                                                     {visiblePasswords[user.uid] ? user.password : '••••••••'}
                                                 </span>
                                                 <button
                                                     onClick={() => togglePasswordVisibility(user.uid)}
                                                     className="btn"
                                                     style={{ 
-                                                        padding: '0.25rem 0.6rem', 
-                                                        fontSize: '0.75rem', 
+                                                        padding: '0.35rem 0.75rem', 
+                                                        fontSize: '0.85rem', 
                                                         display: 'inline-flex', 
                                                         alignItems: 'center', 
-                                                        gap: '0.25rem',
+                                                        gap: '0.35rem',
                                                         background: 'var(--bg-glass)',
                                                         border: '1px solid var(--border)'
                                                     }}
                                                 >
                                                     {visiblePasswords[user.uid] ? (
                                                         <>
-                                                            <EyeOff size={12} />
+                                                            <EyeOff size={14} />
                                                             Ocultar Contraseña
                                                         </>
                                                     ) : (
                                                         <>
-                                                            <Eye size={12} />
+                                                            <Eye size={14} />
                                                             Ver Contraseña
                                                         </>
                                                     )}
                                                 </button>
                                             </div>
-                                            <div>ID Cuenta Primaria: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{user.accountId}</span></div>
+                                            <div>ID Cuenta Primaria: <span style={{ fontFamily: 'monospace', color: 'var(--primary)', fontWeight: 600 }}>{user.accountId}</span></div>
                                             <div>Creado el: {new Date(user.createdAt).toLocaleDateString()}</div>
-                                            <div style={{ marginTop: '0.25rem' }}>
-                                                <span style={{ fontWeight: 600, display: 'block', fontSize: '0.75rem', marginBottom: '0.2rem' }}>Membresías:</span>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                                            <div style={{ marginTop: '0.4rem' }}>
+                                                <span style={{ fontWeight: 600, display: 'block', fontSize: '0.9rem', marginBottom: '0.35rem' }}>Membresías:</span>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
                                                     {(user.memberships || []).map((m, idx) => (
                                                         <span key={idx} style={{
                                                             background: m.id === targetAccountId ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.05)',
-                                                            border: m.id === targetAccountId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.05)',
-                                                            padding: '0.15rem 0.4rem',
-                                                            borderRadius: '4px',
-                                                            fontSize: '0.65rem',
+                                                            border: m.id === targetAccountId ? '1px solid var(--primary)' : '1px solid rgba(255, 255, 255, 0.1)',
+                                                            padding: '0.3rem 0.65rem',
+                                                            borderRadius: '6px',
+                                                            fontSize: '0.85rem',
                                                             color: m.role === 'master' ? '#fde047' : '#93c5fd'
                                                         }}>
                                                             📁 {m.id} ({m.role}) {m.expiresAt && `[Expira: ${new Date(m.expiresAt).toLocaleDateString()}]`}
                                                         </span>
                                                     ))}
-                                                    {(user.memberships || []).length === 0 && <span style={{ fontStyle: 'italic', fontSize: '0.7rem' }}>Ninguna</span>}
+                                                    {(user.memberships || []).length === 0 && <span style={{ fontStyle: 'italic', fontSize: '0.85rem' }}>Ninguna</span>}
                                                 </div>
                                             </div>
                                         </div>
@@ -609,28 +611,28 @@ const AdminsView = () => {
 
                                     {/* Role Configuration Form for targetAccountId */}
                                     <div style={{
-                                        flex: '1 1 260px',
+                                        flex: '1 1 300px',
                                         minWidth: 0,
                                         background: 'rgba(255, 255, 255, 0.02)',
                                         border: '1px solid var(--border)',
-                                        borderRadius: '8px',
-                                        padding: '1rem',
+                                        borderRadius: '12px',
+                                        padding: '1.25rem',
                                         display: 'flex',
                                         flexDirection: 'column',
-                                        gap: '0.75rem'
+                                        gap: '1rem'
                                     }}>
-                                        <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                            <Shield size={14} color="var(--primary)" />
+                                        <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                            <Shield size={16} color="var(--primary)" />
                                             Ajustes de Rol para {targetAccountId}
                                         </div>
 
-                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                                             {/* Role Selector */}
                                             <div style={{ flex: '1 1 140px' }}>
-                                                <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Rol</label>
+                                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Rol</label>
                                                 <select
                                                     className="glass-input"
-                                                    style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                    style={{ padding: '0.55rem 0.85rem', fontSize: '0.95rem', width: '100%' }}
                                                     value={editState.role}
                                                     onChange={e => handleEditChange(user.uid, 'role', e.target.value)}
                                                 >
@@ -644,10 +646,10 @@ const AdminsView = () => {
                                             {/* Duration Type Selector */}
                                             {editState.role !== 'remove' && (
                                                 <div style={{ flex: '1 1 140px' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Duración</label>
+                                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Duración</label>
                                                     <select
                                                         className="glass-input"
-                                                        style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                        style={{ padding: '0.55rem 0.85rem', fontSize: '0.95rem', width: '100%' }}
                                                         value={editState.durationType}
                                                         onChange={e => handleEditChange(user.uid, 'durationType', e.target.value)}
                                                     >
@@ -661,13 +663,13 @@ const AdminsView = () => {
                                         {/* Datepicker for limited duration */}
                                         {editState.role !== 'remove' && editState.durationType === 'limited' && (
                                             <div className="animate-fade-in">
-                                                <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Fecha de Vencimiento</label>
+                                                <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Fecha de Vencimiento</label>
                                                 <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                                                    <Calendar size={14} style={{ position: 'absolute', left: '0.75rem', opacity: 0.6 }} />
+                                                    <Calendar size={16} style={{ position: 'absolute', left: '0.85rem', opacity: 0.6 }} />
                                                     <input
                                                         type="date"
                                                         className="glass-input"
-                                                        style={{ padding: '0.4rem 0.4rem 0.4rem 2.2rem', fontSize: '0.8rem', width: '100%' }}
+                                                        style={{ padding: '0.55rem 0.85rem 0.55rem 2.5rem', fontSize: '0.95rem', width: '100%' }}
                                                         value={editState.expiresAt}
                                                         onChange={e => handleEditChange(user.uid, 'expiresAt', e.target.value)}
                                                         min={new Date().toISOString().substring(0, 10)}
@@ -676,12 +678,12 @@ const AdminsView = () => {
                                             </div>
                                         )}
 
-                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', marginTop: '0.25rem' }}>
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', marginTop: '0.35rem' }}>
                                             <button
                                                 className="btn btn-primary"
                                                 style={{
-                                                    padding: '0.4rem 1rem',
-                                                    fontSize: '0.8rem',
+                                                    padding: '0.6rem 1.2rem',
+                                                    fontSize: '0.95rem',
                                                     justifyContent: 'center',
                                                     opacity: isThisUserCurrentUser && editState.role !== 'master' ? 0.5 : 1
                                                 }}
@@ -696,8 +698,8 @@ const AdminsView = () => {
                                                 <button
                                                     className="btn btn-danger"
                                                     style={{
-                                                        padding: '0.4rem 1rem',
-                                                        fontSize: '0.8rem',
+                                                        padding: '0.6rem 1.2rem',
+                                                        fontSize: '0.95rem',
                                                         justifyContent: 'center',
                                                         background: 'rgba(239, 68, 68, 0.15)',
                                                         border: '1px solid rgba(239, 68, 68, 0.3)',
@@ -727,8 +729,8 @@ const AdminsView = () => {
                                                 <button
                                                     className="btn"
                                                     style={{
-                                                        padding: '0.4rem 1rem',
-                                                        fontSize: '0.8rem',
+                                                        padding: '0.6rem 1.2rem',
+                                                        fontSize: '0.95rem',
                                                         justifyContent: 'center',
                                                         background: 'rgba(16, 185, 129, 0.15)',
                                                         border: '1px solid rgba(16, 185, 129, 0.3)',
@@ -762,16 +764,16 @@ const AdminsView = () => {
                                 <div style={{
                                     display: 'flex',
                                     flexWrap: 'wrap',
-                                    gap: '0.5rem',
+                                    gap: '0.75rem',
                                     borderTop: '1px solid var(--border)',
-                                    paddingTop: '0.75rem',
-                                    marginTop: '0.25rem'
+                                    paddingTop: '1rem',
+                                    marginTop: '0.35rem'
                                 }}>
                                     <button
                                         className="btn"
                                         style={{
-                                            padding: '0.4rem 0.75rem',
-                                            fontSize: '0.75rem',
+                                            padding: '0.6rem 1rem',
+                                            fontSize: '0.9rem',
                                             background: user.isMaster ? 'rgba(239, 68, 68, 0.15)' : 'rgba(99, 102, 241, 0.15)',
                                             border: user.isMaster ? '1px solid rgba(239, 68, 68, 0.3)' : '1px solid rgba(99, 102, 241, 0.3)',
                                             color: user.isMaster ? '#fca5a5' : '#a5b4fc',
@@ -779,7 +781,7 @@ const AdminsView = () => {
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            gap: '0.35rem'
+                                            gap: '0.5rem'
                                         }}
                                         onClick={async () => {
                                             if (window.confirm(`¿Estás seguro de ${user.isMaster ? 'quitar' : 'conceder'} permisos de Master Global a ${user.username}?`)) {
@@ -791,15 +793,15 @@ const AdminsView = () => {
                                         }}
                                         disabled={isThisUserCurrentUser}
                                     >
-                                        <Crown size={14} />
+                                        <Crown size={16} />
                                         {user.isMaster ? 'Quitar Master Global' : 'Hacer Master Global'}
                                     </button>
 
                                     <button
                                         className="btn"
                                         style={{
-                                            padding: '0.4rem 0.75rem',
-                                            fontSize: '0.75rem',
+                                            padding: '0.6rem 1rem',
+                                            fontSize: '0.9rem',
                                             background: user.isBlocked ? 'rgba(16, 185, 129, 0.15)' : 'rgba(239, 68, 68, 0.15)',
                                             border: user.isBlocked ? '1px solid rgba(16, 185, 129, 0.3)' : '1px solid rgba(239, 68, 68, 0.3)',
                                             color: user.isBlocked ? '#34d399' : '#fca5a5',
@@ -807,34 +809,33 @@ const AdminsView = () => {
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            gap: '0.35rem'
+                                            gap: '0.5rem'
                                         }}
                                         onClick={() => handleToggleBlock(user.uid, user.isBlocked)}
                                         disabled={isThisUserCurrentUser}
                                     >
-                                        <ShieldAlert size={14} />
+                                        <ShieldAlert size={16} />
                                         {user.isBlocked ? 'Desbloquear Usuario' : 'Bloquear Usuario Global'}
                                     </button>
 
                                     <button
                                         className="btn-danger"
                                         style={{
-                                            padding: '0.4rem 0.75rem',
-                                            fontSize: '0.75rem',
+                                            padding: '0.6rem 1rem',
+                                            fontSize: '0.9rem',
                                             flex: '1 1 260px',
                                             display: 'flex',
                                             alignItems: 'center',
                                             justifyContent: 'center',
-                                            gap: '0.35rem'
+                                            gap: '0.5rem'
                                         }}
                                         onClick={() => confirmDelete(user.uid, user.username)}
                                         disabled={isThisUserCurrentUser}
                                     >
-                                        <Trash2 size={14} />
+                                        <Trash2 size={16} />
                                         Eliminar Usuario del Sistema
                                     </button>
                                 </div>
-
                             </div>
                         );
                     })}
@@ -842,20 +843,20 @@ const AdminsView = () => {
             </div>
 
             {/* SECTION 2: Global User Directory and Cross-Church Access Management */}
-            <div className="glass-panel" style={{ padding: '1.5rem', marginTop: '2rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem', marginBottom: '1.5rem' }}>
+            <div className="glass-panel" style={{ padding: '2rem', marginTop: '2.5rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1.25rem', marginBottom: '2rem' }}>
                     <div>
                         <h3 style={{
                             display: 'flex',
                             alignItems: 'center',
-                            gap: '0.5rem',
-                            fontSize: '1.1rem',
-                            fontWeight: 600,
+                            gap: '0.75rem',
+                            fontSize: '1.35rem',
+                            fontWeight: 700,
                             margin: 0
                         }}>
                             🌐 Directorio Global de Todos los Usuarios ({users.length})
                         </h3>
-                        <p style={{ fontSize: '0.8rem', color: 'var(--text-muted)', margin: '0.25rem 0 0 0' }}>
+                        <p style={{ fontSize: '0.95rem', color: 'var(--text-muted)', margin: '0.4rem 0 0 0' }}>
                             Concede o revoca acceso a cualquier iglesia del sistema para cualquier usuario sin importar su iglesia de origen.
                         </p>
                     </div>
@@ -866,11 +867,11 @@ const AdminsView = () => {
                         placeholder="🔍 Buscar por nombre o ID de cuenta..."
                         value={globalSearch}
                         onChange={e => setGlobalSearch(e.target.value)}
-                        style={{ padding: '0.4rem 0.8rem', fontSize: '0.85rem', width: '280px' }}
+                        style={{ padding: '0.6rem 1rem', fontSize: '0.95rem', width: '320px' }}
                     />
                 </div>
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
                     {users
                         .filter(u => {
                             if (!globalSearch.trim()) return true;
@@ -886,50 +887,50 @@ const AdminsView = () => {
 
                             return (
                                 <div key={`global-${user.uid}`} style={{
-                                    padding: '1.25rem',
+                                    padding: '1.5rem',
                                     background: 'rgba(15, 23, 42, 0.4)',
-                                    borderRadius: '12px',
+                                    borderRadius: '16px',
                                     border: '1px solid var(--border)',
                                     display: 'flex',
                                     flexDirection: 'column',
-                                    gap: '1rem'
+                                    gap: '1.25rem'
                                 }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1.25rem' }}>
                                         {/* User Main Info */}
-                                        <div style={{ flex: '1 1 260px', minWidth: 0 }}>
-                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                                                <span style={{ fontWeight: 700, fontSize: '1.1rem', color: 'var(--text-main)' }}>{user.username}</span>
+                                        <div style={{ flex: '1 1 300px', minWidth: 0 }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+                                                <span style={{ fontWeight: 700, fontSize: '1.25rem', color: 'var(--text-main)' }}>{user.username}</span>
                                                 {isThisUserCurrentUser && (
-                                                    <span style={{ background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600 }}>Tú</span>
+                                                    <span style={{ background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)', color: 'var(--primary)', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>Tú</span>
                                                 )}
                                                 {user.isMaster && (
-                                                    <span style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', color: 'white', padding: '0.15rem 0.5rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.25rem' }}>
-                                                        <Crown size={10} /> MASTER GLOBAL
+                                                    <span style={{ background: 'linear-gradient(135deg, var(--primary) 0%, var(--secondary) 100%)', color: 'white', padding: '0.25rem 0.75rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}>
+                                                        <Crown size={12} /> MASTER GLOBAL
                                                     </span>
                                                 )}
                                                 {user.isBlocked && (
-                                                    <span style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '0.15rem 0.4rem', borderRadius: '4px', fontSize: '0.65rem', fontWeight: 600 }}>Bloqueado</span>
+                                                    <span style={{ background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', color: '#fca5a5', padding: '0.25rem 0.6rem', borderRadius: '6px', fontSize: '0.8rem', fontWeight: 600 }}>Bloqueado</span>
                                                 )}
                                             </div>
 
-                                            <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                                                <div>ID Primario: <span style={{ fontFamily: 'monospace', color: 'var(--primary)' }}>{user.accountId}</span></div>
+                                            <div style={{ fontSize: '0.95rem', color: 'var(--text-muted)' }}>
+                                                <div>ID Primario: <span style={{ fontFamily: 'monospace', color: 'var(--primary)', fontWeight: 600 }}>{user.accountId}</span></div>
                                             </div>
 
                                             {/* Memberships Badges with instant Remove button */}
-                                            <div style={{ marginTop: '0.5rem' }}>
-                                                <span style={{ fontWeight: 600, display: 'block', fontSize: '0.75rem', marginBottom: '0.25rem' }}>Iglesias con Acceso Concedido:</span>
-                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.4rem' }}>
+                                            <div style={{ marginTop: '0.75rem' }}>
+                                                <span style={{ fontWeight: 600, display: 'block', fontSize: '0.9rem', marginBottom: '0.4rem' }}>Iglesias con Acceso Concedido:</span>
+                                                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
                                                     {(user.memberships || []).map((m, idx) => (
                                                         <div key={idx} style={{
                                                             background: 'rgba(99, 102, 241, 0.15)',
                                                             border: '1px solid rgba(99, 102, 241, 0.3)',
-                                                            padding: '0.2rem 0.5rem',
-                                                            borderRadius: '6px',
-                                                            fontSize: '0.7rem',
+                                                            padding: '0.35rem 0.75rem',
+                                                            borderRadius: '8px',
+                                                            fontSize: '0.85rem',
                                                             display: 'flex',
                                                             alignItems: 'center',
-                                                            gap: '0.4rem'
+                                                            gap: '0.5rem'
                                                         }}>
                                                             <span>📁 {m.id} ({m.role})</span>
                                                             <button
@@ -939,13 +940,13 @@ const AdminsView = () => {
                                                                     border: 'none',
                                                                     color: '#fca5a5',
                                                                     borderRadius: '50%',
-                                                                    width: '18px',
-                                                                    height: '18px',
+                                                                    width: '22px',
+                                                                    height: '22px',
                                                                     display: 'flex',
                                                                     alignItems: 'center',
                                                                     justifyContent: 'center',
                                                                     cursor: 'pointer',
-                                                                    fontSize: '0.7rem',
+                                                                    fontSize: '0.8rem',
                                                                     padding: 0
                                                                 }}
                                                                 onClick={async () => {
@@ -965,35 +966,35 @@ const AdminsView = () => {
                                                             </button>
                                                         </div>
                                                     ))}
-                                                    {(user.memberships || []).length === 0 && <span style={{ fontStyle: 'italic', fontSize: '0.75rem', color: 'var(--text-muted)' }}>Ninguna iglesia asignada</span>}
+                                                    {(user.memberships || []).length === 0 && <span style={{ fontStyle: 'italic', fontSize: '0.9rem', color: 'var(--text-muted)' }}>Ninguna iglesia asignada</span>}
                                                 </div>
                                             </div>
                                         </div>
 
                                         {/* Grant Access Form */}
                                         <div style={{
-                                            flex: '1 1 300px',
+                                            flex: '1 1 320px',
                                             minWidth: 0,
                                             background: 'rgba(255, 255, 255, 0.02)',
                                             border: '1px solid var(--border)',
-                                            borderRadius: '8px',
-                                            padding: '1rem',
+                                            borderRadius: '12px',
+                                            padding: '1.25rem',
                                             display: 'flex',
                                             flexDirection: 'column',
-                                            gap: '0.75rem'
+                                            gap: '1rem'
                                         }}>
-                                            <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                                                <Key size={14} color="var(--primary)" />
+                                            <div style={{ fontWeight: 600, fontSize: '1rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                                <Key size={16} color="var(--primary)" />
                                                 Conceder Acceso a Iglesia
                                             </div>
 
-                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.75rem' }}>
                                                 {/* Select or type Church ID */}
-                                                <div style={{ flex: '1 1 140px' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Seleccionar Iglesia</label>
+                                                <div style={{ flex: '1 1 150px' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Seleccionar Iglesia</label>
                                                     <select
                                                         className="glass-input"
-                                                        style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                        style={{ padding: '0.55rem 0.85rem', fontSize: '0.95rem', width: '100%' }}
                                                         value={gState.churchCode}
                                                         onChange={e => handleGrantStateChange(user.uid, 'churchCode', e.target.value)}
                                                     >
@@ -1006,11 +1007,11 @@ const AdminsView = () => {
                                                 </div>
 
                                                 {/* Role Selector */}
-                                                <div style={{ flex: '1 1 120px' }}>
-                                                    <label style={{ display: 'block', fontSize: '0.7rem', color: 'var(--text-muted)', marginBottom: '0.25rem' }}>Rol a Asignar</label>
+                                                <div style={{ flex: '1 1 130px' }}>
+                                                    <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: '0.35rem' }}>Rol a Asignar</label>
                                                     <select
                                                         className="glass-input"
-                                                        style={{ padding: '0.4rem', fontSize: '0.8rem', width: '100%' }}
+                                                        style={{ padding: '0.55rem 0.85rem', fontSize: '0.95rem', width: '100%' }}
                                                         value={gState.role}
                                                         onChange={e => handleGrantStateChange(user.uid, 'role', e.target.value)}
                                                     >
@@ -1025,10 +1026,10 @@ const AdminsView = () => {
                                             <button
                                                 className="btn btn-primary"
                                                 style={{
-                                                    padding: '0.45rem 1rem',
-                                                    fontSize: '0.8rem',
+                                                    padding: '0.6rem 1.2rem',
+                                                    fontSize: '0.95rem',
                                                     justifyContent: 'center',
-                                                    marginTop: '0.25rem'
+                                                    marginTop: '0.35rem'
                                                 }}
                                                 onClick={async () => {
                                                     const targetChurch = gState.churchCode || targetAccountId;
