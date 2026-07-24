@@ -25,7 +25,7 @@ async function testUpdateUser() {
         },
         body: JSON.stringify({ memberships: newMemberships })
     });
-    const patchData = await patch-Res.json();
+    const patchData = await patchRes.json();
     console.log('Update result:', patchData);
 }
 
