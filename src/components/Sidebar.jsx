@@ -7,12 +7,33 @@ import Settings from './Settings';
 import { supabase } from '../lib/supabase';
 
 const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeView, onSelectAdmins, onSelectHistory, isOpen, onClose, isCollapsed, onToggleCollapse }) => {
-    const { templates } = useStorage();
+    const { templates, members } = useStorage();
     const { currentUser, activeAccountId, setActiveAccountId, canEdit, canCreateTemplate, users, updateUserRole, deleteUser } = useAuth();
     const { t } = useLanguage();
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [isIdCopied, setIsIdCopied] = useState(false);
     const [churchNames, setChurchNames] = useState({});
+
+    // Filter templates for current user (Masters/Admins/Editors see all; viewers see only their templates)
+    const activeMembership = (currentUser?.memberships || []).find(m => m.id === activeAccountId || m.id === currentUser?.accountId);
+    const userRole = activeMembership?.role || (currentUser?.isMaster ? 'master' : 'editor');
+    const isMasterOrEditor = currentUser?.isMaster || userRole === 'master' || userRole === 'admin' || userRole === 'editor';
+
+    const userNames = [
+        currentUser?.username,
+        currentUser?.name,
+        ...(currentUser?.memberships || []).map(m => m.fullName || m.name)
+    ].filter(Boolean).map(n => String(n).toLowerCase().trim());
+
+    const isUserMemberOfTemplate = (templateId) => {
+        if (isMasterOrEditor) return true;
+        const templateMembers = (members || []).filter(m => String(m.templateId || m.template_id) === String(templateId));
+        return templateMembers.some(m => userNames.includes(String(m.name || '').toLowerCase().trim()));
+    };
+
+    const userTemplates = (templates || [])
+        .filter(t => t.name !== '__church_metadata__')
+        .filter(t => isUserMemberOfTemplate(t.id));
 
     useEffect(() => {
         const fetchChurchNames = async () => {
@@ -185,7 +206,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                     </h3>
 
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                        {templates.filter(t => t.name !== '__church_metadata__').map(template => (
+                        {userTemplates.map(template => (
                             <button
                                 key={template.id}
                                 onClick={() => onSelectTemplate(template.id)}
@@ -214,7 +235,7 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                             </button>
                         ))}
 
-                        {templates.length === 0 && (
+                        {userTemplates.length === 0 && (
                             <p style={{ fontSize: '0.8125rem', color: 'var(--text-muted)', padding: '1rem', textAlign: 'center', fontStyle: 'italic' }}>
                                 {t('noTemplatesYet')}
                             </p>
@@ -223,30 +244,28 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
                 </div>
 
                 <div style={{ marginTop: 'auto', paddingTop: '1.5rem', borderTop: '1px solid var(--border)', display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                    {templates.length > 0 && (
-                        <button
-                            onClick={onSelectHistory}
-                            style={{
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '0.75rem',
-                                padding: '0.75rem 1rem',
-                                borderRadius: '10px',
-                                border: activeView === 'history' ? '1px solid var(--primary)' : '1px solid var(--border)',
-                                background: activeView === 'history' ? 'var(--primary-glow)' : 'var(--bg-glass)',
-                                color: activeView === 'history' ? '#fff' : 'var(--text-main)',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s',
-                                width: '100%',
-                                fontSize: '0.875rem',
-                                fontWeight: 500
-                            }}
-                            className="sidebar-item"
-                        >
-                            <FileText size={18} opacity={activeView === 'history' ? 1 : 0.6} />
-                            Historia
-                        </button>
-                    )}
+                    <button
+                        onClick={onSelectHistory}
+                        style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            borderRadius: '10px',
+                            border: activeView === 'history' ? '1px solid var(--primary)' : '1px solid var(--border)',
+                            background: activeView === 'history' ? 'var(--primary-glow)' : 'var(--bg-glass)',
+                            color: activeView === 'history' ? '#fff' : 'var(--text-main)',
+                            cursor: 'pointer',
+                            transition: 'all 0.2s',
+                            width: '100%',
+                            fontSize: '0.875rem',
+                            fontWeight: 500
+                        }}
+                        className="sidebar-item"
+                    >
+                        <FileText size={18} opacity={activeView === 'history' ? 1 : 0.6} />
+                        Historia
+                    </button>
                     {currentUser?.username?.toLowerCase() === 'keylet' && (
                         <button
                             onClick={onSelectAdmins}

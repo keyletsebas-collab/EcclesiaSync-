@@ -32,7 +32,6 @@ const Settings = ({ isOpen, onClose }) => {
     // Notification Control State
     const [notifPermission, setNotifPermission] = useState('checking');
     const [syncMessage, setSyncMessage] = useState('');
-    const [testLoading, setTestLoading] = useState(false);
 
     const updatePermissionStatus = async () => {
         const status = await notificationService.checkPermissionStatus();
@@ -53,19 +52,6 @@ const Settings = ({ isOpen, onClose }) => {
         } else {
             setSyncMessage('⚠️ Permisos denegados por el sistema');
         }
-        setTimeout(() => setSyncMessage(''), 4000);
-    };
-
-    const handleTestNotification = async () => {
-        setTestLoading(true);
-        setSyncMessage('');
-        await notificationService.sendLocalNotification(
-            Date.now(),
-            '🔔 Prueba de Notificación',
-            '¡Las notificaciones de VerbumSync están funcionando perfectamente en tu dispositivo!'
-        );
-        setTestLoading(false);
-        setSyncMessage('📱 Notificación de prueba emitida');
         setTimeout(() => setSyncMessage(''), 4000);
     };
 
@@ -460,27 +446,6 @@ const Settings = ({ isOpen, onClose }) => {
 
 
 
-
-            {/* Motor de Notificaciones */}
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>
-                <h4 style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem', fontSize: '0.875rem', fontWeight: 600, color: 'var(--primary)' }}>
-                    🔔 Motor de Notificaciones
-                </h4>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', marginBottom: '0.75rem', lineHeight: '1.4' }}>
-                    Sincroniza y prueba el envío instantáneo de alertas en Android (sonido, vibración y aviso en pantalla).
-                </p>
-                <button
-                    type="button"
-                    onClick={async () => {
-                        await notificationService.sendInstantTestNotification();
-                        alert('¡Notificación de prueba enviada! Revisa la barra superior de tu dispositivo.');
-                    }}
-                    className="btn btn-primary"
-                    style={{ width: '100%', fontSize: '0.875rem', padding: '0.5rem', justifyContent: 'center' }}
-                >
-                    🔔 Enviar Notificación de Prueba
-                </button>
-            </div>
 
             {/* About */}
             <div style={{ marginBottom: '2rem', padding: '1rem', background: 'var(--bg-glass)', borderRadius: 'var(--radius)', border: '1px solid var(--border)' }}>

@@ -27,6 +27,12 @@ function App() {
 
 
 
+  // Initialize notification permissions and realtime niche listeners on app mount
+  useEffect(() => {
+    notificationService.ensurePermissions();
+    notificationService.listenToAllNiches();
+  }, []);
+
   // Reset active view and template when current user changes (e.g. login/logout)
   useEffect(() => {
     setActiveTemplateId(null);

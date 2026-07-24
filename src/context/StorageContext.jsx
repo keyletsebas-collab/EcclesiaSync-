@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
-import { useAuth } from './AuthContext';
+import { useAuth, generateUserCode } from './AuthContext';
 import { supabase } from '../lib/supabase';
 import notificationService from '../utils/NotificationService';
 
@@ -86,13 +86,69 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     const [loading, setLoading] = useState(false);
     const [isCreatingTemplate, setIsCreatingTemplate] = useState(false);
     
-    // Cooldown trackers
+    // Cooldown trackers & Deleted IDs Set
     const lastAddTemplateNameRef = useRef('');
     const lastAddTemplateTimeRef = useRef(0);
     const channelRef = useRef(null);
+    const deletedIdsRef = useRef(new Set());
+
+    const templatesRef = useRef(templates);
+    const membersRef = useRef(members);
+
+    useEffect(() => {
+        templatesRef.current = templates;
+    }, [templates]);
+
+    useEffect(() => {
+        membersRef.current = members;
+    }, [members]);
+
+    const isUserInTemplate = (templateId) => {
+        if (!currentUser) return false;
+        if (!templateId) return true;
+
+        // Master, Admin, and Editor roles have access to all templates in active account
+        const activeMembership = (currentUser.memberships || []).find(m => m.id === accountId || m.id === currentUser.accountId);
+        const userRole = activeMembership?.role || (currentUser.isMaster ? 'master' : 'editor');
+        if (currentUser.isMaster || userRole === 'master' || userRole === 'admin' || userRole === 'editor') {
+            return true;
+        }
+
+        // Regular users: check if listed in members for this template
+        const userNames = [
+            currentUser.username,
+            currentUser.name,
+            ...(currentUser.memberships || []).map(m => m.fullName || m.name)
+        ].filter(Boolean).map(n => String(n).toLowerCase().trim());
+
+        const userIds = [
+            currentUser.uid,
+            currentUser.memberId,
+            ...(currentUser.memberships || []).map(m => m.id)
+        ].filter(Boolean).map(id => String(id));
+
+        const currentMembers = membersRef.current || members;
+        const templateMembers = currentMembers.filter(m => String(m.templateId || m.template_id) === String(templateId));
+
+        const isMemberOfTemplate = templateMembers.some(m => {
+            const memberName = String(m.name || '').toLowerCase().trim();
+            const memberId = String(m.id || '');
+            const matchesName = userNames.includes(memberName);
+            const matchesId = userIds.some(id => id && memberId && id === memberId);
+            return matchesName || matchesId;
+        });
+
+        return isMemberOfTemplate;
+    };
 
     const processRealtimeService = (service) => {
         if (!service || service.account_id !== accountId) return;
+
+        const targetTemplateId = service.template_id || service.templateId;
+        if (targetTemplateId && !isUserInTemplate(targetTemplateId)) {
+            console.log('🔒 Usuario no pertenece a la plantilla de este servicio. Omitiendo notificación.');
+            return;
+        }
 
         // Parse serviceType (could be a JSON string like {"type":"Poesía","media":[],"isFinished":true})
         const rawServiceType = service.service_type || 'Servicio';
@@ -136,11 +192,62 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
         
         const isOuting = !isRehearsal && (lowerType.includes('salida') || lowerType.includes('salidas') || lowerProgram.includes('salida') || lowerProgram.includes('salidas') || templateName.includes('salida') || templateName.includes('salidas'));
         
+        const isUserAssignedToService = (service, user) => {
+            if (!user) return true;
+
+            let assignedList = [];
+            if (Array.isArray(service.assigned_members)) {
+                assignedList = service.assigned_members;
+            } else if (typeof service.assigned_members === 'string') {
+                try {
+                    assignedList = JSON.parse(service.assigned_members);
+                } catch(e) {}
+            } else if (Array.isArray(service.assignedMembers)) {
+                assignedList = service.assignedMembers;
+            }
+
+            if (!assignedList || assignedList.length === 0) {
+                const singleName = service.member_name || service.memberName;
+                const singleId = service.member_id || service.memberId;
+                if (singleName || singleId) {
+                    assignedList = [{ id: singleId, name: singleName }];
+                }
+            }
+
+            // Si solo se eligió a 1 persona, sólo esa persona recibe la notificación
+            if (assignedList && assignedList.length === 1) {
+                const assignedPerson = assignedList[0];
+                const assignedName = (assignedPerson?.name || '').toLowerCase().trim();
+                const assignedId = String(assignedPerson?.id || assignedPerson?.member_id || '');
+
+                const userNames = [
+                    user.username,
+                    user.name,
+                    ...(user.memberships || []).map(m => m.fullName || m.name)
+                ].filter(Boolean).map(n => String(n).toLowerCase().trim());
+
+                const userIds = [
+                    user.uid,
+                    user.memberId,
+                    ...(user.memberships || []).map(m => m.id)
+                ].filter(Boolean).map(id => String(id));
+
+                const matchesName = userNames.includes(assignedName);
+                const matchesId = userIds.some(id => id && assignedId && id === assignedId);
+                return matchesName || matchesId;
+            }
+            return true;
+        };
+
+        if (!isUserAssignedToService(service, currentUser)) {
+            console.log('🔒 Servicio/Campaña asignado únicamente a otra persona. Omitiendo notificación para este usuario.');
+            return;
+        }
+
         const isPoetry = lowerType.includes('poesía') || lowerType.includes('poesia') || templateName.includes('poesía') || templateName.includes('poesia');
-        const isUserAssigned = assignedMembers?.some(m => m.name?.toLowerCase() === currentUser?.username?.toLowerCase()) || service.member_name?.toLowerCase() === currentUser?.username?.toLowerCase();
+        const templateObj = templates.find(t => t.id === service.template_id);
 
         if (isCampaign) {
-            const templateObj = templates.find(t => t.id === service.template_id);
             const isSo = templateObj?.customFields?.includes('__sonido__') || templateObj?.name?.toLowerCase().includes('sonido');
             const isPo = templateObj?.customFields?.includes('__poetry__') || templateObj?.name?.toLowerCase().includes('poesia') || templateObj?.name?.toLowerCase().includes('poesía');
             if (isPo) {
@@ -185,7 +292,14 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const processRealtimeProgram = (prog) => {
-        if (!prog) return;
+        if (!prog || prog.account_id !== accountId) return;
+
+        const targetTemplateId = prog.template_id || prog.templateId;
+        if (targetTemplateId && !isUserInTemplate(targetTemplateId)) {
+            console.log('🔒 Usuario no pertenece a la plantilla de este programa. Omitiendo notificación.');
+            return;
+        }
+
         const templateObj = templates.find(t => t.id === prog.template_id);
         const isSo = templateObj?.customFields?.includes('__sonido__') || templateObj?.name?.toLowerCase().includes('sonido');
         const isPo = templateObj?.customFields?.includes('__poetry__') || templateObj?.name?.toLowerCase().includes('poesia') || templateObj?.name?.toLowerCase().includes('poesía');
@@ -199,7 +313,12 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const processRealtimeTemplate = (newTemplateRow) => {
-        if (!newTemplateRow) return;
+        if (!newTemplateRow || newTemplateRow.account_id !== accountId) return;
+
+        if (newTemplateRow.id && !isUserInTemplate(newTemplateRow.id)) {
+            console.log('🔒 Usuario no pertenece a esta plantilla. Omitiendo notificación.');
+            return;
+        }
 
         // Find existing template in state to compare
         const oldTemplate = templates.find(t => t.id === newTemplateRow.id);
@@ -261,9 +380,9 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
             if (pRes.error) console.error('Programs fetch error:', pRes.error);
 
             const tData = (tRes.data || []).filter(t => t.name !== '__church_metadata__').map(mapTemplateToObj);
-            const mData = (mRes.data || []).map(mapMemberToObj);
-            const sData = (sRes.data || []).map(mapServiceToObj);
-            const pData = (pRes.data || []).map(mapProgramToObj);
+            const mData = (mRes.data || []).map(mapMemberToObj).filter(m => !deletedIdsRef.current.has(String(m.id)));
+            const sData = (sRes.data || []).map(mapServiceToObj).filter(s => !deletedIdsRef.current.has(String(s.id)));
+            const pData = (pRes.data || []).map(mapProgramToObj).filter(p => !deletedIdsRef.current.has(String(p.id)));
 
             console.log('✅ [LuminaSync] Conexión a Supabase establecida. Resumen:', {
                 plantillas: tData.length,
@@ -369,32 +488,49 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                     })
                     .on('broadcast', { event: 'real_service_change' }, ({ payload }) => {
                         console.log('📢 Realtime Broadcast Service change:', payload);
-                        fetchData();
-                        try {
-                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
-                                processRealtimeService(payload.new);
+                        if (payload?.eventType === 'DELETE' && payload.old?.id) {
+                            setServices(prev => prev.filter(s => String(s.id) !== String(payload.old.id)));
+                        } else {
+                            fetchData();
+                            try {
+                                if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                    processRealtimeService(payload.new);
+                                }
+                            } catch (e) {
+                                console.error('Error processing realtime service broadcast:', e);
                             }
-                        } catch (e) {
-                            console.error('Error processing realtime service broadcast:', e);
                         }
                     })
                     .on('broadcast', { event: 'real_program_change' }, ({ payload }) => {
                         console.log('📢 Realtime Broadcast Program change:', payload);
-                        fetchData();
-                        try {
-                            if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
-                                processRealtimeProgram(payload.new);
+                        if (payload?.eventType === 'DELETE' && payload.old?.id) {
+                            setPrograms(prev => prev.filter(p => String(p.id) !== String(payload.old.id)));
+                        } else {
+                            fetchData();
+                            try {
+                                if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
+                                    processRealtimeProgram(payload.new);
+                                }
+                            } catch (e) {
+                                console.error('Error processing realtime program broadcast:', e);
                             }
-                        } catch (e) {
-                            console.error('Error processing realtime program broadcast:', e);
                         }
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'members' }, (payload) => {
                         console.log('🔄 Realtime Member change:', payload);
-                        fetchData();
+                        if (payload?.eventType === 'DELETE' && payload.old?.id) {
+                            setMembers(prev => prev.filter(m => String(m.id) !== String(payload.old.id)));
+                        } else {
+                            fetchData();
+                        }
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'services' }, (payload) => {
                         console.log('🔄 Realtime Service change:', payload);
+                        if (payload?.eventType === 'DELETE' && (payload.old?.id || payload.payload?.old?.id)) {
+                            const deletedId = payload.old?.id || payload.payload?.old?.id;
+                            setServices(prev => prev.filter(s => String(s.id) !== String(deletedId)));
+                            return;
+                        }
                         fetchData();
                         try {
                             if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
@@ -428,6 +564,11 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                     })
                     .on('postgres_changes', { event: '*', schema: 'public', table: 'programs' }, (payload) => {
                         console.log('🔄 Realtime Program change:', payload);
+                        if (payload?.eventType === 'DELETE' && (payload.old?.id || payload.payload?.old?.id)) {
+                            const deletedId = payload.old?.id || payload.payload?.old?.id;
+                            setPrograms(prev => prev.filter(p => String(p.id) !== String(deletedId)));
+                            return;
+                        }
                         fetchData();
                         try {
                             if (payload && (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE')) {
@@ -560,7 +701,7 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
 
                 if (!userSearchErr && matchedUsers) {
                     const matchedUserRow = matchedUsers.find(u => {
-                        const code = u.user_code || '';
+                        const code = u.user_code || generateUserCode(u.uid);
                         return code.toUpperCase() === cleanCode;
                     });
 
@@ -686,8 +827,10 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const deleteMember = async (id) => {
+        const deletedIdStr = String(id);
+        deletedIdsRef.current.add(deletedIdStr);
         const prevMembers = [...members];
-        setMembers(prev => prev.filter(m => m.id !== id));
+        setMembers(prev => prev.filter(m => String(m.id) !== deletedIdStr));
         try {
             const { error } = await supabase
                 .from('members')
@@ -782,8 +925,10 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const deleteService = async (id) => {
+        const deletedIdStr = String(id);
+        deletedIdsRef.current.add(deletedIdStr);
         setServices(prev => {
-            const updated = prev.filter(s => s.id !== id);
+            const updated = prev.filter(s => String(s.id) !== deletedIdStr);
             if (currentUser) {
                 notificationService.syncAllLocalNotifications(currentUser, updated, members, templates, users || []);
             }
@@ -796,6 +941,14 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 .eq('id', id);
 
             if (error) throw error;
+
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_service_change',
+                    payload: { eventType: 'DELETE', old: { id } }
+                });
+            }
         } catch (err) {
             console.error('Failed to delete service:', err);
             fetchData();
@@ -836,7 +989,9 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
     };
 
     const deleteProgram = async (id) => {
-        setPrograms(prev => prev.filter(p => p.id !== id));
+        const deletedIdStr = String(id);
+        deletedIdsRef.current.add(deletedIdStr);
+        setPrograms(prev => prev.filter(p => String(p.id) !== deletedIdStr));
         try {
             const { error } = await supabase
                 .from('programs')
@@ -844,6 +999,14 @@ export const StorageProvider = ({ children, accountId: propAccountId }) => {
                 .eq('id', id);
 
             if (error) throw error;
+
+            if (channelRef.current) {
+                channelRef.current.send({
+                    type: 'broadcast',
+                    event: 'real_program_change',
+                    payload: { eventType: 'DELETE', old: { id } }
+                });
+            }
         } catch (err) {
             console.error('Failed to delete program:', err);
             fetchData();

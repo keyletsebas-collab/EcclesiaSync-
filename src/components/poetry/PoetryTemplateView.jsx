@@ -9,6 +9,7 @@ import PoetryServicesView from './PoetryServicesView';
 import ProgramsView from '../shared/ProgramsView';
 import FinancesView from '../shared/FinancesView';
 import notificationService from '../../utils/NotificationService';
+import { digitalizePoetry } from '../../utils/GeminiService';
 
 const PoetryTemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
@@ -108,24 +109,51 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
         if (!file) return;
         setIsDigitalizing(true);
         try {
-            const formData = new FormData();
-            formData.append('image', file);
+            let resultText = '';
+            try {
+                resultText = await digitalizePoetry(file);
+            } catch (geminiErr) {
+                if (geminiErr.message?.includes('clave API') || geminiErr.message?.includes('API_KEY') || geminiErr.message?.includes('configurado')) {
+                    const userKey = prompt('🔑 Digitalización IA (Google Gemini):\nIngresa tu clave API de Gemini (o pégala aquí). Se guardará en este dispositivo:');
+                    if (userKey && userKey.trim()) {
+                        localStorage.setItem('VITE_GEMINI_API_KEY', userKey.trim());
+                        resultText = await digitalizePoetry(file);
+                    } else {
+                        throw geminiErr;
+                    }
+                } else {
+                    // Fallback to backend API endpoint if configured
+                    const formData = new FormData();
+                    formData.append('image', file);
 
-            const res = await fetch('/api/scan-poetry', {
-                method: 'POST',
-                body: formData
-            });
+                    const res = await fetch('/api/scan-poetry', {
+                        method: 'POST',
+                        body: formData
+                    });
 
-            if (!res.ok) {
-                const errData = await res.json();
-                throw new Error(errData.error || 'Error al procesar la imagen con IA');
+                    const contentType = res.headers.get('content-type') || '';
+                    if (!res.ok || !contentType.includes('application/json')) {
+                        throw new Error(geminiErr.message || 'Servidor de IA no disponible o la clave API no está configurada.');
+                    }
+
+                    const data = await res.json();
+                    if (data.title && data.content) {
+                        setNewPoemTitle(data.title);
+                        setNewPoemContent(data.content);
+                        if (data.author) setNewPoemAuthor(data.author);
+                        setIsAddMemberOpen(true);
+                        return;
+                    }
+                }
             }
 
-            const data = await res.json();
-            if (data.title && data.content) {
-                setNewPoemTitle(data.title);
-                setNewPoemContent(data.content);
-                if (data.author) setNewPoemAuthor(data.author);
+            if (resultText) {
+                const lines = resultText.split('\n').map(l => l.trim()).filter(Boolean);
+                const title = lines[0] || file.name.replace(/\.[^/.]+$/, '');
+                const content = lines.slice(1).join('\n') || resultText;
+
+                setNewPoemTitle(title);
+                setNewPoemContent(content);
                 setIsAddMemberOpen(true);
             }
         } catch (err) {

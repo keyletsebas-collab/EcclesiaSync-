@@ -426,32 +426,30 @@ const AdminsView = () => {
                                                 </div>
                                             )}
 
-                                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                                            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
                                                 {!isEditing && (
                                                     <button
                                                         onClick={() => {
                                                             setEditingChurchCode(c.code);
                                                             setEditChurchName(c.name);
                                                         }}
-                                                        className="btn"
-                                                        style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
+                                                        className="btn btn-sm"
+                                                        style={{ background: 'var(--bg-glass)', border: '1px solid var(--border)' }}
                                                     >
                                                         ✏️ Editar Nombre
                                                     </button>
                                                 )}
                                                 <button
                                                     onClick={() => setSelectedChurchCode(c.code)}
-                                                    className={`btn ${isSelected ? 'btn-primary' : ''}`}
-                                                    style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)' }}
+                                                    className={`btn btn-sm ${isSelected ? 'btn-primary' : ''}`}
+                                                    style={{ background: isSelected ? '' : 'var(--bg-glass)', border: isSelected ? '' : '1px solid var(--border)' }}
                                                 >
                                                     🔍 Ver Usuarios
                                                 </button>
                                                 <button
                                                     onClick={() => handleDeleteChurch(c.code)}
-                                                    className="btn"
+                                                    className="btn btn-sm"
                                                     style={{ 
-                                                        padding: '0.25rem 0.5rem', 
-                                                        fontSize: '0.75rem', 
                                                         background: 'rgba(239, 68, 68, 0.1)', 
                                                         border: '1px solid rgba(239, 68, 68, 0.2)',
                                                         color: '#f87171' 

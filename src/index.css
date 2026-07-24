@@ -359,38 +359,51 @@ body {
 }
 
 button, input, select, textarea {
-  font-size: 1rem !important;
-  border-radius: var(--radius-sm) !important;
+  font-size: 1rem;
+  border-radius: var(--radius-sm);
 }
 
 .glass-input, input, select, textarea {
-  padding: 0.85rem 1.25rem !important;
-  border-radius: 16px !important;
-  transition: all 0.25s ease !important;
+  padding: 0.85rem 1.25rem;
+  border-radius: 16px;
+  transition: all 0.25s ease;
 }
 
 .btn, button.btn {
-  padding: 0.85rem 1.75rem !important;
-  border-radius: var(--radius-pill) !important;
-  font-weight: 700 !important;
-  transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease !important;
+  padding: 0.75rem 1.5rem;
+  border-radius: var(--radius-pill);
+  font-weight: 600;
+  transition: transform 0.2s ease, filter 0.2s ease, box-shadow 0.2s ease;
+}
+
+.btn-sm, button.btn-sm {
+  padding: 0.35rem 0.75rem !important;
+  font-size: 0.8rem !important;
+  border-radius: 8px !important;
+  white-space: nowrap !important;
+}
+
+.btn-xs, button.btn-xs {
+  padding: 0.2rem 0.5rem !important;
+  font-size: 0.75rem !important;
+  border-radius: 6px !important;
+  white-space: nowrap !important;
 }
 
 h1 {
-  font-size: 2.8rem !important;
+  font-size: 2.8rem;
 }
 
 h2 {
-  font-size: 1.8rem !important;
+  font-size: 1.8rem;
 }
 
 h3 {
-  font-size: 1.4rem !important;
+  font-size: 1.4rem;
 }
 
 .btn svg {
-  width: 20px !important;
-  height: 20px !important;
+  flex-shrink: 0;
 }
 
 /* Pulsing animations for prayer requests and badges */

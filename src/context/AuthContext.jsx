@@ -44,7 +44,7 @@ const getNamesAndPhonesForUser = (userObj) => {
     return { names, phones };
 };
 
-const generateUserCode = (str) => {
+export const generateUserCode = (str) => {
     let hash = 0;
     const input = String(str || Math.random());
     for (let i = 0; i < input.length; i++) {
@@ -375,8 +375,7 @@ export const AuthProvider = ({ children }) => {
                 created_at: createdAt,
                 is_blocked: false,
                 memberships,
-                birthday: birthday ? birthday.trim() : null,
-                user_code: userCode
+                birthday: birthday ? birthday.trim() : null
             };
 
             const { error: insErr } = await supabase.from('users').insert([newUserRow]);
@@ -750,12 +749,10 @@ export const AuthProvider = ({ children }) => {
     const canCreateTemplate = () => {
         if (!currentUser) return false;
         if (currentUser.isMaster) return true;
-        // User's own primary church always allows template creation
-        if (activeAccountId === currentUser.accountId) return true;
         const membership = currentUser.memberships?.find(m => m.id === activeAccountId);
-        if (!membership) return false;
-        if (membership.role === 'viewer') return false;
-        return membership.role === 'master' || membership.role === 'editor';
+        const role = membership?.role || (activeAccountId === currentUser.accountId ? 'editor' : 'viewer');
+        if (role === 'viewer' || role === 'guest') return false;
+        return role === 'master' || role === 'admin' || role === 'editor';
     };
 
     const createChurch = async (churchName) => {

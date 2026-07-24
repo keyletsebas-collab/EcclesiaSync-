@@ -4,10 +4,19 @@
  */
 
 const getGeminiApiKey = () => {
-  return import.meta.env.VITE_GEMINI_API_KEY || '';
+  return (
+    import.meta.env.VITE_GEMINI_API_KEY ||
+    import.meta.env.GEMINI_API_KEY ||
+    (typeof localStorage !== 'undefined' && (localStorage.getItem('VITE_GEMINI_API_KEY') || localStorage.getItem('GEMINI_API_KEY'))) ||
+    ''
+  );
 };
 
-const BASE_URL = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent";
+const MODELS_TO_TRY = [
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent",
+  "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent"
+];
 
 const SUPPORTED_MIME_TYPES = [
   "image/jpeg",
@@ -125,40 +134,57 @@ const callGemini = async (payload) => {
   if (!apiKey) {
     throw new Error("No se ha configurado la clave API de Gemini. Por favor, añádela al archivo .env del proyecto como GEMINI_API_KEY.");
   }
-  const response = await fetch(`${BASE_URL}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload)
-  });
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    console.error("Gemini API Error Response:", errorData);
+  let lastError = null;
 
-    if (response.status === 403) {
-      throw new Error("Error de permisos: La clave API de Gemini podría ser inválida o estar restringida.");
+  for (const endpointUrl of MODELS_TO_TRY) {
+    try {
+      const response = await fetch(`${endpointUrl}?key=${apiKey}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        console.warn(`Gemini API Warning (${endpointUrl}):`, errorData);
+
+        if (response.status === 429 && endpointUrl !== MODELS_TO_TRY[MODELS_TO_TRY.length - 1]) {
+          // If 429 quota exceeded on one model, attempt next model in list
+          continue;
+        }
+
+        if (response.status === 403) {
+          throw new Error("Error de permisos: La clave API de Gemini podría ser inválida o estar restringida.");
+        }
+
+        throw new Error(errorData.error?.message || `Error del servidor IA (${response.status})`);
+      }
+
+      const result = await response.json();
+
+      if (!result.candidates || result.candidates.length === 0) {
+        throw new Error("La IA no pudo generar una respuesta. Es posible que el contenido haya sido bloqueado por filtros de seguridad.");
+      }
+
+      const candidate = result.candidates[0];
+
+      if (candidate.finishReason === "SAFETY") {
+        throw new Error("El contenido fue bloqueado por los filtros de seguridad de la IA.");
+      }
+
+      if (!candidate.content?.parts?.length) {
+        throw new Error("La IA devolvió una respuesta vacía.");
+      }
+
+      return candidate.content.parts[0].text;
+    } catch (err) {
+      lastError = err;
+      if (err.message?.includes("permisos")) throw err;
     }
-
-    throw new Error(errorData.error?.message || `Error del servidor IA (${response.status})`);
   }
 
-  const result = await response.json();
-
-  if (!result.candidates || result.candidates.length === 0) {
-    throw new Error("La IA no pudo generar una respuesta. Es posible que el contenido haya sido bloqueado por filtros de seguridad.");
-  }
-
-  const candidate = result.candidates[0];
-
-  if (candidate.finishReason === "SAFETY") {
-    throw new Error("El contenido fue bloqueado por los filtros de seguridad de la IA.");
-  }
-
-  if (!candidate.content?.parts?.length) {
-    throw new Error("La IA devolvió una respuesta vacía.");
-  }
-
-  return candidate.content.parts[0].text;
+  throw lastError || new Error("Error al comunicarse con la IA de Gemini.");
 };
 
 const fileToBase64 = (file) => {

@@ -20,8 +20,26 @@ const HistoryView = () => {
     const [selectedPoem, setSelectedPoem] = useState(null);
     const [activeSubTab, setActiveSubTab] = useState('miembros'); // Sub-tabs for template details
 
-    // Filter accessible templates for current church account
-    const accessibleTemplates = (templates || []).filter(t => t.name !== '__church_metadata__');
+    // Filter accessible templates for current user and church account
+    const activeMembership = (currentUser?.memberships || []).find(m => m.id === activeAccountId || m.id === currentUser?.accountId);
+    const userRole = activeMembership?.role || (currentUser?.isMaster ? 'master' : 'editor');
+    const isMasterOrEditor = currentUser?.isMaster || userRole === 'master' || userRole === 'admin' || userRole === 'editor';
+
+    const userNames = [
+        currentUser?.username,
+        currentUser?.name,
+        ...(currentUser?.memberships || []).map(m => m.fullName || m.name)
+    ].filter(Boolean).map(n => String(n).toLowerCase().trim());
+
+    const isUserMemberOfTemplate = (templateId) => {
+        if (isMasterOrEditor) return true;
+        const templateMembers = (members || []).filter(m => String(m.templateId || m.template_id) === String(templateId));
+        return templateMembers.some(m => userNames.includes(String(m.name || '').toLowerCase().trim()));
+    };
+
+    const accessibleTemplates = (templates || [])
+        .filter(t => t.name !== '__church_metadata__')
+        .filter(t => isUserMemberOfTemplate(t.id));
 
     useEffect(() => {
         const fetchChurchName = async () => {
