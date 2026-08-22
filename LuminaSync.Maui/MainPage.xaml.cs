@@ -62,7 +62,7 @@ namespace LuminaSync.Maui
             };
         }
 
-        protected override async void OnAppearing()
+        protected override void OnAppearing()
         {
             base.OnAppearing();
             if (!_isInitialized)
@@ -72,27 +72,8 @@ namespace LuminaSync.Maui
                 // Start initialization in the background without blocking the UI thread
                 _ = InitializeAppAsync();
 
-
-
-
-
-                try
-                {
-                    using var stream = await FileSystem.OpenAppPackageFileAsync("index.html");
-                    using var reader = new StreamReader(stream);
-                    string htmlContent = await reader.ReadToEndAsync();
-
-                    MyWebView.Source = new HtmlWebViewSource
-                    {
-                        Html = htmlContent,
-                        BaseUrl = "file:///android_asset/"
-                    };
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"[App] Failed to load local index.html string: {ex.Message}");
-                    MyWebView.Source = "index.html"; // Fallback
-                }
+                // Load index.html directly from app package assets as a file URL
+                MyWebView.Source = "index.html";
             }
         }
 
@@ -176,7 +157,12 @@ namespace LuminaSync.Maui
                 }
 
                 var intent = context.PackageManager?.GetLaunchIntentForPackage(context.PackageName ?? string.Empty);
-                var pendingIntent = Android.App.PendingIntent.GetActivity(context, 0, intent, Android.App.PendingIntentFlags.UpdateCurrent | Android.App.PendingIntentFlags.Immutable);
+                var flags = Android.App.PendingIntentFlags.UpdateCurrent;
+                if (Android.OS.Build.VERSION.SdkInt >= Android.OS.BuildVersionCodes.M)
+                {
+                    flags |= Android.App.PendingIntentFlags.Immutable;
+                }
+                var pendingIntent = Android.App.PendingIntent.GetActivity(context, 0, intent, flags);
 
                 int iconId = context.Resources != null ? context.Resources.GetIdentifier("appicon", "mipmap", context.PackageName) : 0;
                 if (iconId == 0 && context.Resources != null)
@@ -188,14 +174,15 @@ namespace LuminaSync.Maui
                     iconId = context.ApplicationInfo?.Icon ?? Android.Resource.Drawable.IcDialogInfo;
                 }
 
-                var builder = new Android.App.Notification.Builder(context, channelId)
+                var builder = new NotificationCompat.Builder(context, channelId)
                     .SetContentTitle(title)
                     .SetContentText(body)
                     .SetSmallIcon(iconId)
                     .SetAutoCancel(true)
                     .SetContentIntent(pendingIntent);
 
-                manager?.Notify(notificationId, builder?.Build());
+                var notificationManagerCompat = NotificationManagerCompat.From(context);
+                notificationManagerCompat.Notify(notificationId, builder.Build());
             }
             catch (Exception ex)
             {

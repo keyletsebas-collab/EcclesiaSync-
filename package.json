@@ -11,6 +11,7 @@
     "tunnel": "concurrently \"vite preview --host\" \"npm run server\" \"npx localtunnel --port 5173 --subdomain verbumsync\"",
     "db:init": "node api/init-supabase.js",
     "build": "vite build",
+    "serve": "npx serve -s dist",
     "lint": "eslint .",
     "preview": "vite preview"
   },

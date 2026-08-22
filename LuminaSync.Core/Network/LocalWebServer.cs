@@ -7,6 +7,7 @@ using Newtonsoft.Json;
 using LuminaSync.Core.Data;
 using LuminaSync.Core.Models;
 using System.Collections.Generic;
+using Service = LuminaSync.Core.Models.Service;
 
 namespace LuminaSync.Core.Network
 {
