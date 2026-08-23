@@ -47,13 +47,27 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
         fetchChurchName();
     }, [activeAccountId]);
 
-    // Accessible templates
-    const accessibleTemplates = (templates || []).filter(t => t.name !== '__church_metadata__');
-
-    // Check if user is keylet or global master admin
+    // Check if user is keylet or master
     const isKeylet = currentUser?.username?.toLowerCase().trim() === 'keylet';
     const isMaster = currentUser?.isMaster || currentUser?.is_master || currentUser?.memberships?.some(m => m.role === 'master');
     const canViewGlobalAll = isKeylet || isMaster;
+
+    const userNames = [
+        currentUser?.username,
+        currentUser?.name,
+        ...(currentUser?.memberships || []).map(m => m.fullName || m.name)
+    ].filter(Boolean).map(n => String(n).toLowerCase().trim());
+
+    const isUserMemberOfTemplate = (templateId) => {
+        if (canViewGlobalAll) return true;
+        const templateMembers = (members || []).filter(m => String(m.templateId || m.template_id) === String(templateId));
+        return templateMembers.some(m => userNames.includes(String(m.name || '').toLowerCase().trim()));
+    };
+
+    // Accessible templates for current user
+    const accessibleTemplates = (templates || [])
+        .filter(t => t.name !== '__church_metadata__')
+        .filter(t => isUserMemberOfTemplate(t.id));
 
     // Ensure selectedTemplateId is valid
     useEffect(() => {
@@ -302,7 +316,7 @@ const DashboardView = ({ onSelectTemplate, onSelectAdmins, onSelectHistory, onOp
             </div>
 
             {/* Template Selector Bar for Dashboard */}
-            {accessibleTemplates.length > 0 && (
+            {(canViewGlobalAll || accessibleTemplates.length > 0) && (
                 <div className="glass-panel" style={{ padding: '1.25rem 1.5rem', background: 'rgba(15, 23, 42, 0.7)', borderRadius: '20px', border: '1px solid rgba(255, 255, 255, 0.1)', boxShadow: '0 12px 30px rgba(0,0,0,0.25)' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '0.85rem' }}>
                         <label style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.8px', margin: 0, display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

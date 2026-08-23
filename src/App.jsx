@@ -102,39 +102,29 @@ function App() {
     setNewTemplateFields(newFields);
   };
 
+  const [unlockedTemplates, setUnlockedTemplates] = useState({});
+
   const handleSelectTemplate = async (templateId) => {
     const template = templates.find(t => t.id === templateId);
     if (!template) return;
 
-    const isMaster = currentUser?.isMaster || false;
-    const activeMembership = currentUser?.memberships?.find(m => m.id === template.accountId);
-    const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
-
-    const templateMembers = members.filter(m => m.templateId === templateId);
-    const isMember = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
-
-    if (isMaster || isMember) {
-      setActiveTemplateId(templateId);
-      setActiveView('templates');
-      setIsMobileSidebarOpen(false);
-      return;
-    }
-
+    const isMaster = currentUser?.isMaster || currentUser?.is_master || false;
     const pwdField = template.customFields?.find(f => f.startsWith('__password:'));
-    if (!pwdField) {
-      // Just select and open the template view
-      setActiveTemplateId(templateId);
-      setActiveView('templates');
-      setIsMobileSidebarOpen(false);
+    const templatePassword = pwdField ? pwdField.replace('__password:', '').trim() : '';
+
+    // If template has a password and user is not master, enforce password check unless already unlocked in session
+    if (templatePassword && !isMaster && !unlockedTemplates[templateId]) {
+      setPendingTemplateId(templateId);
+      setTemplatePasswordPrompt(templatePassword);
+      setEnteredTemplatePassword('');
+      setPasswordError('');
+      setIsPasswordModalOpen(true);
       return;
     }
 
-    const correctPassword = pwdField.replace('__password:', '');
-    setPendingTemplateId(templateId);
-    setTemplatePasswordPrompt(correctPassword);
-    setEnteredTemplatePassword('');
-    setPasswordError('');
-    setIsPasswordModalOpen(true);
+    setActiveTemplateId(templateId);
+    setActiveView('templates');
+    setIsMobileSidebarOpen(false);
   };
 
   const handlePasswordSubmit = async (e) => {
@@ -145,30 +135,34 @@ function App() {
       const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
       const activePhone = activeMembership?.phone || '';
       const templateMembers = members.filter(m => m.templateId === pendingTemplateId);
+      const isMember = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
 
-      try {
-        const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
-        const nextNumber = maxNumber + 1;
-        const isPoetry = template?.customFields?.includes('__poetry__');
-        const isSonido = template?.customFields?.includes('__sonido__');
-        const identifications = isPoetry
-          ? { isParticipant: true }
-          : isSonido
-            ? { hasKey: false }
-            : {
-                hasKey: false,
-                needsPrayer: false
-              };
-        await addMember(pendingTemplateId, {
-          name: currentUserFullName,
-          number: nextNumber,
-          phone: activePhone,
-          identifications
-        });
-      } catch (err) {
-        console.error('Error joining template:', err);
+      if (!isMember && currentUserFullName) {
+        try {
+          const maxNumber = templateMembers.reduce((max, m) => (m.number > max ? m.number : max), 0);
+          const nextNumber = maxNumber + 1;
+          const isPoetry = template?.customFields?.includes('__poetry__');
+          const isSonido = template?.customFields?.includes('__sonido__');
+          const identifications = isPoetry
+            ? { isParticipant: true }
+            : isSonido
+              ? { hasKey: false }
+              : {
+                  hasKey: false,
+                  needsPrayer: false
+                };
+          await addMember(pendingTemplateId, {
+            name: currentUserFullName,
+            number: nextNumber,
+            phone: activePhone,
+            identifications
+          });
+        } catch (err) {
+          console.error('Error joining template:', err);
+        }
       }
 
+      setUnlockedTemplates(prev => ({ ...prev, [pendingTemplateId]: true }));
       setActiveTemplateId(pendingTemplateId);
       setActiveView('templates');
       setIsMobileSidebarOpen(false);

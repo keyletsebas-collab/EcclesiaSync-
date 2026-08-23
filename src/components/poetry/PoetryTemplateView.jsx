@@ -3,7 +3,7 @@ import { useStorage } from '../../context/StorageContext';
 import { useAuth } from '../../context/AuthContext';
 import { useLanguage } from '../../context/LanguageContext';
 import { generateTemplatePDF } from '../../utils/pdfGenerator';
-import { Trash2, Edit2, UserPlus, Download, Search, ShieldAlert, Save, BookOpen, Sparkles, Upload, Loader2, X } from 'lucide-react';
+import { Trash2, Edit2, UserPlus, Download, Search, ShieldAlert, Save, BookOpen, Sparkles, Upload, Loader2, X, Users } from 'lucide-react';
 import Modal from '../Modal';
 import PoetryServicesView from './PoetryServicesView';
 import ProgramsView from '../shared/ProgramsView';
@@ -17,8 +17,14 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
     const { t } = useLanguage();
 
     const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
+    const [isAddParticipantOpen, setIsAddParticipantOpen] = useState(false);
     const [searchTerm, setSearchTerm] = useState('');
-    const [activeTab, setActiveTab] = useState('members'); // 'members', 'services', 'programs', 'finances', 'settings'
+    const [participantSearchTerm, setParticipantSearchTerm] = useState('');
+    const [activeTab, setActiveTab] = useState('members'); // 'members', 'users', 'services', 'programs', 'finances', 'settings'
+
+    // Participant state
+    const [newParticipantName, setNewParticipantName] = useState('');
+    const [newParticipantPhone, setNewParticipantPhone] = useState('');
 
     // Poetry specific states
     const [expandedPoemId, setExpandedPoemId] = useState(null);
@@ -67,6 +73,20 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
     const poems = templateMembers.filter(m => !m.identifications?.isParticipant);
     const participants = templateMembers.filter(m => m.identifications?.isParticipant);
 
+    const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+    const isCurrentUserAdded = participants.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
+
+    const handleAddSelf = async () => {
+        if (!currentUserFullName) return;
+        await addMember(templateId, {
+            name: currentUserFullName,
+            phone: activeMembership?.phone || '',
+            identifications: {
+                isParticipant: true
+            }
+        });
+    };
+
     const filteredPoems = poems.filter(poem => {
         const titleMatch = poem.name?.toLowerCase().includes(searchTerm.toLowerCase());
         const authorMatch = poem.phone?.toLowerCase().includes(searchTerm.toLowerCase());
@@ -78,6 +98,28 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
         if (poemFilter === 'manual') return !poem.identifications?.isDigitized;
         return true;
     });
+
+    const filteredParticipants = participants.filter(p => 
+        p.name?.toLowerCase().includes(participantSearchTerm.toLowerCase()) ||
+        p.phone?.toLowerCase().includes(participantSearchTerm.toLowerCase())
+    );
+
+    const handleAddParticipant = async (e) => {
+        e.preventDefault();
+        if (!newParticipantName.trim()) return;
+
+        await addMember(templateId, {
+            name: newParticipantName.trim(),
+            phone: newParticipantPhone.trim(),
+            identifications: {
+                isParticipant: true
+            }
+        });
+
+        setNewParticipantName('');
+        setNewParticipantPhone('');
+        setIsAddParticipantOpen(false);
+    };
 
     const handleAddPoem = async (e) => {
         e.preventDefault();
@@ -181,6 +223,13 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
 
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
                     <button 
+                        className={`btn ${activeTab === 'users' ? 'btn-primary' : ''}`}
+                        onClick={() => setActiveTab('users')}
+                        style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                    >
+                        <Users size={16} /> Usuarios ({participants.length})
+                    </button>
+                    <button 
                         className="btn" 
                         onClick={() => generateTemplatePDF(template, templateMembers, [])}
                         style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
@@ -215,6 +264,21 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
                     }}
                 >
                     📖 Biblioteca de Poemas ({poems.length})
+                </button>
+                <button
+                    onClick={() => setActiveTab('users')}
+                    style={{
+                        background: activeTab === 'users' ? 'var(--primary-glow)' : 'transparent',
+                        border: 'none',
+                        color: activeTab === 'users' ? '#fff' : 'var(--text-muted)',
+                        padding: '0.75rem 1.5rem',
+                        borderRadius: 'var(--radius)',
+                        cursor: 'pointer',
+                        fontWeight: 600,
+                        whiteSpace: 'nowrap'
+                    }}
+                >
+                    👥 Usuarios ({participants.length})
                 </button>
                 <button
                     onClick={() => setActiveTab('services')}
@@ -423,6 +487,80 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
                                     </div>
                                 );
                             })}
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* TAB: Users / Participants */}
+            {activeTab === 'users' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 1rem', flex: 1, minWidth: '260px', gap: '0.5rem' }}>
+                            <Search size={18} color="var(--text-muted)" />
+                            <input
+                                type="text"
+                                placeholder="Buscar usuario o recitador..."
+                                value={participantSearchTerm}
+                                onChange={(e) => setParticipantSearchTerm(e.target.value)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-main)', width: '100%', outline: 'none' }}
+                            />
+                        </div>
+                        {canEdit && (
+                            <button 
+                                className="btn btn-primary" 
+                                onClick={() => setIsAddParticipantOpen(true)}
+                                style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}
+                            >
+                                <UserPlus size={16} /> Añadir Usuario / Recitador
+                            </button>
+                        )}
+                    </div>
+
+                    {filteredParticipants.length === 0 ? (
+                        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                            <Users size={48} opacity={0.3} />
+                            <p style={{ margin: 0 }}>No hay usuarios o recitadores registrados en esta plantilla todavía.</p>
+                            {canEdit && (
+                                <button className="btn btn-primary" onClick={() => setIsAddParticipantOpen(true)}>
+                                    Registrar Primer Usuario
+                                </button>
+                            )}
+                        </div>
+                    ) : (
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+                            {filteredParticipants.map(participant => (
+                                <div key={participant.id} className="glass-panel" style={{ padding: '1.25rem', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '1rem' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                        <div style={{ width: '40px', height: '40px', borderRadius: '50%', background: 'var(--primary-glow)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#fff', fontWeight: 'bold', fontSize: '1.1rem' }}>
+                                            {participant.name?.charAt(0).toUpperCase() || 'U'}
+                                        </div>
+                                        <div>
+                                            <div style={{ fontWeight: 700, fontSize: '1rem', color: 'var(--text-main)' }}>
+                                                {participant.name}
+                                            </div>
+                                            {participant.phone && (
+                                                <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                                                    📞 {participant.phone}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    {canEdit && (
+                                        <button
+                                            onClick={() => {
+                                                if (window.confirm(`¿Seguro que deseas eliminar a ${participant.name} de esta plantilla?`)) {
+                                                    deleteMember(participant.id);
+                                                }
+                                            }}
+                                            style={{ background: 'none', border: 'none', color: '#ef4444', cursor: 'pointer', padding: '0.35rem' }}
+                                            title="Eliminar usuario"
+                                        >
+                                            <Trash2 size={16} />
+                                        </button>
+                                    )}
+                                </div>
+                            ))}
                         </div>
                     )}
                 </div>
@@ -677,6 +815,38 @@ const PoetryTemplateView = ({ templateId, onDeleted }) => {
                     </div>
                     <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
                         Guardar Poesía
+                    </button>
+                </form>
+            </Modal>
+
+            {/* Add Participant / User Modal */}
+            <Modal isOpen={isAddParticipantOpen} onClose={() => setIsAddParticipantOpen(false)} title="Añadir Usuario / Recitador">
+                <form onSubmit={handleAddParticipant} style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
+                    <div>
+                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Nombre Completo / Usuario</label>
+                        <input
+                            type="text"
+                            className="glass-input"
+                            value={newParticipantName}
+                            onChange={(e) => setNewParticipantName(e.target.value)}
+                            required
+                            placeholder="Ej: Juan Pérez"
+                            style={{ width: '100%' }}
+                        />
+                    </div>
+                    <div>
+                        <label style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>Teléfono (Opcional)</label>
+                        <input
+                            type="text"
+                            className="glass-input"
+                            value={newParticipantPhone}
+                            onChange={(e) => setNewParticipantPhone(e.target.value)}
+                            placeholder="Ej: +58 412 1234567"
+                            style={{ width: '100%' }}
+                        />
+                    </div>
+                    <button type="submit" className="btn btn-primary" style={{ marginTop: '0.5rem' }}>
+                        Guardar Usuario
                     </button>
                 </form>
             </Modal>

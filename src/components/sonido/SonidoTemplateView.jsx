@@ -12,7 +12,7 @@ import notificationService from '../../utils/NotificationService';
 
 const SonidoTemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
-    const { currentUser, canEdit } = useAuth();
+    const { currentUser, canEdit, users } = useAuth();
     const { t } = useLanguage();
 
     const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -35,6 +35,49 @@ const SonidoTemplateView = ({ templateId, onDeleted }) => {
     const templateMembers = members.filter(m => m.templateId === templateId);
 
     const activeMembership = currentUser?.memberships?.find(m => m.id === template?.accountId);
+    const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+    const isCurrentUserAdded = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
+
+    // Church Users list
+    const churchUsers = (users || []).map(u => {
+        const membership = u.memberships?.find(m => m.id === template?.accountId);
+        const name = membership?.fullName || u.username;
+        const phone = membership?.phone || u.phone || '';
+        return { uid: u.uid, name, phone };
+    }).filter(u => u.name);
+
+    const handleSyncAllChurchUsers = async () => {
+        const existingNames = new Set(templateMembers.map(m => m.name?.toLowerCase().trim()));
+        let addedCount = 0;
+        for (const u of churchUsers) {
+            if (u.name && !existingNames.has(u.name.toLowerCase().trim())) {
+                await addMember(templateId, {
+                    name: u.name,
+                    phone: u.phone || '',
+                    identifications: {
+                        soundRole: 'Consola'
+                    }
+                });
+                addedCount++;
+            }
+        }
+        if (addedCount > 0) {
+            alert(`Se han añadido ${addedCount} usuario(s) de la iglesia a la plantilla de sonido.`);
+        } else {
+            alert('Todos los usuarios registrados ya forman parte de esta plantilla.');
+        }
+    };
+
+    const handleAddSelf = async () => {
+        if (!currentUserFullName) return;
+        await addMember(templateId, {
+            name: currentUserFullName,
+            phone: activeMembership?.phone || '',
+            identifications: {
+                soundRole: 'Consola'
+            }
+        });
+    };
 
     React.useEffect(() => {
         if (template) {
@@ -95,6 +138,16 @@ const SonidoTemplateView = ({ templateId, onDeleted }) => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {!isCurrentUserAdded && currentUserFullName && (
+                        <button 
+                            className="btn"
+                            onClick={handleAddSelf}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399' }}
+                        >
+                            <UserPlus size={16} /> Añadirme a esta plantilla
+                        </button>
+                    )}
+
                     <button 
                         className="btn" 
                         onClick={() => generateTemplatePDF(template, templateMembers, [])}
@@ -196,20 +249,34 @@ const SonidoTemplateView = ({ templateId, onDeleted }) => {
             {/* TAB: Members / Technicians */}
             {activeTab === 'members' && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-                    <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 1rem', maxWidth: '400px', gap: '0.5rem' }}>
-                        <Search size={18} color="var(--text-muted)" />
-                        <input
-                            type="text"
-                            placeholder="Buscar técnico por nombre o teléfono..."
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            style={{ background: 'none', border: 'none', color: 'var(--text-main)', width: '100%', outline: 'none' }}
-                        />
+                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        <div className="glass-panel" style={{ display: 'flex', alignItems: 'center', padding: '0.5rem 1rem', flex: 1, minWidth: '260px', gap: '0.5rem' }}>
+                            <Search size={18} color="var(--text-muted)" />
+                            <input
+                                type="text"
+                                placeholder="Buscar técnico por nombre o teléfono..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                                style={{ background: 'none', border: 'none', color: 'var(--text-main)', width: '100%', outline: 'none' }}
+                            />
+                        </div>
                     </div>
 
                     {filteredMembers.length === 0 ? (
-                        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)' }}>
-                            No hay técnicos de sonido registrados.
+                        <div className="glass-panel" style={{ padding: '3rem', textAlign: 'center', color: 'var(--text-muted)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '1rem' }}>
+                            <p style={{ margin: 0 }}>No hay técnicos de sonido registrados.</p>
+                            <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                                {!isCurrentUserAdded && currentUserFullName && (
+                                    <button className="btn btn-primary" onClick={handleAddSelf} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                        <UserPlus size={16} /> Añadirme como técnico ({currentUserFullName})
+                                    </button>
+                                )}
+                                {churchUsers.length > 0 && (
+                                    <button className="btn" onClick={handleSyncAllChurchUsers} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(99, 102, 241, 0.15)', border: '1px solid rgba(99, 102, 241, 0.3)' }}>
+                                        <UserPlus size={16} /> Cargar usuarios de la iglesia ({churchUsers.length})
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     ) : (
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1.25rem' }}>

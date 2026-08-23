@@ -12,7 +12,7 @@ import notificationService from '../../utils/NotificationService';
 
 const DiaconosTemplateView = ({ templateId, onDeleted }) => {
     const { templates, members, addMember, deleteMember, updateTemplate, deleteTemplate, updateMember } = useStorage();
-    const { currentUser, canEdit } = useAuth();
+    const { currentUser, canEdit, users } = useAuth();
     const { t } = useLanguage();
 
     const [isAddMemberOpen, setIsAddMemberOpen] = useState(false);
@@ -37,6 +37,55 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
     const templateMembers = members.filter(m => m.templateId === templateId);
 
     const activeMembership = currentUser?.memberships?.find(m => m.id === template?.accountId);
+    const currentUserFullName = activeMembership?.fullName || currentUser?.username || '';
+    const isCurrentUserAdded = templateMembers.some(m => m.name?.toLowerCase().trim() === currentUserFullName.toLowerCase().trim());
+
+    // Church Users list
+    const churchUsers = (users || []).map(u => {
+        const membership = u.memberships?.find(m => m.id === template?.accountId);
+        const name = membership?.fullName || u.username;
+        const phone = membership?.phone || u.phone || '';
+        return { uid: u.uid, name, phone };
+    }).filter(u => u.name);
+
+    const handleSyncAllChurchUsers = async () => {
+        const existingNames = new Set(templateMembers.map(m => m.name?.toLowerCase().trim()));
+        let addedCount = 0;
+        for (const u of churchUsers) {
+            if (u.name && !existingNames.has(u.name.toLowerCase().trim())) {
+                const maxNumber = templateMembers.reduce((max, mem) => (mem.number > max ? mem.number : max), 0);
+                await addMember(templateId, {
+                    name: u.name,
+                    number: maxNumber + 1 + addedCount,
+                    phone: u.phone || '',
+                    identifications: {
+                        hasKey: false,
+                        needsPrayer: false
+                    }
+                });
+                addedCount++;
+            }
+        }
+        if (addedCount > 0) {
+            alert(`Se han añadido ${addedCount} usuario(s) de la iglesia a la plantilla.`);
+        } else {
+            alert('Todos los usuarios registrados ya forman parte de esta plantilla.');
+        }
+    };
+
+    const handleAddSelf = async () => {
+        if (!currentUserFullName) return;
+        const maxNumber = templateMembers.reduce((max, mem) => (mem.number > max ? mem.number : max), 0);
+        await addMember(templateId, {
+            name: currentUserFullName,
+            number: maxNumber + 1,
+            phone: activeMembership?.phone || '',
+            identifications: {
+                hasKey: false,
+                needsPrayer: false
+            }
+        });
+    };
 
     React.useEffect(() => {
         if (template) {
@@ -115,6 +164,16 @@ const DiaconosTemplateView = ({ templateId, onDeleted }) => {
                 </div>
 
                 <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap' }}>
+                    {!isCurrentUserAdded && currentUserFullName && (
+                        <button 
+                            className="btn"
+                            onClick={handleAddSelf}
+                            style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', background: 'rgba(16, 185, 129, 0.2)', border: '1px solid rgba(16, 185, 129, 0.4)', color: '#34d399' }}
+                        >
+                            <UserPlus size={16} /> Añadirme a esta plantilla
+                        </button>
+                    )}
+
                     <button 
                         className="btn" 
                         onClick={() => generateTemplatePDF(template, templateMembers, [])}

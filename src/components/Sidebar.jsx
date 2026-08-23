@@ -14,10 +14,10 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
     const [isIdCopied, setIsIdCopied] = useState(false);
     const [churchNames, setChurchNames] = useState({});
 
-    // Filter templates for current user (Masters/Admins/Editors see all; viewers see only their templates)
+    // Filter templates for current user (Masters/Admins see all; members see only templates they belong to)
     const activeMembership = (currentUser?.memberships || []).find(m => m.id === activeAccountId || m.id === currentUser?.accountId);
-    const userRole = activeMembership?.role || (currentUser?.isMaster ? 'master' : 'editor');
-    const isMasterOrEditor = currentUser?.isMaster || userRole === 'master' || userRole === 'admin' || userRole === 'editor';
+    const userRole = activeMembership?.role || (currentUser?.isMaster ? 'master' : 'viewer');
+    const isMasterOrAdmin = currentUser?.isMaster || userRole === 'master' || userRole === 'admin';
 
     const userNames = [
         currentUser?.username,
@@ -26,14 +26,14 @@ const Sidebar = ({ activeTemplate, onSelectTemplate, onOpenNewTemplate, activeVi
     ].filter(Boolean).map(n => String(n).toLowerCase().trim());
 
     const isUserMemberOfTemplate = (templateId) => {
-        if (isMasterOrEditor) return true;
+        if (isMasterOrAdmin) return true;
         const templateMembers = (members || []).filter(m => String(m.templateId || m.template_id) === String(templateId));
         return templateMembers.some(m => userNames.includes(String(m.name || '').toLowerCase().trim()));
     };
 
+    // All templates visible in sidebar for any user
     const userTemplates = (templates || [])
-        .filter(t => t.name !== '__church_metadata__')
-        .filter(t => isUserMemberOfTemplate(t.id));
+        .filter(t => t.name !== '__church_metadata__');
 
     useEffect(() => {
         const fetchChurchNames = async () => {
